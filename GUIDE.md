@@ -65,3 +65,66 @@ Or with `task { }`:
 let! items = numbersSource.Read() |> TaskSeq.toListAsync
 // items = [1; 2; 3]
 ```
+
+---
+
+## `Sink<'T>`
+
+A `Sink<'T>` is the **exit point** of a pipeline. It consumes an
+`IAsyncEnumerable<'T>` stream and returns `Task<unit>` once all records
+have been processed.
+
+### Type definition
+
+```fsharp
+type Sink<'T> = {
+    Write: IAsyncEnumerable<'T> -> Task<unit>
+}
+```
+
+### Why pass the whole stream?
+
+Giving the sink the entire `IAsyncEnumerable<'T>` lets it control its
+own iteration strategy:
+
+- A **collecting sink** iterates one item at a time.
+- A **database sink** can buffer records into batches before committing.
+- A **file sink** can open and close the resource around the whole
+  stream rather than per-item.
+
+An item-by-item `Write: 'T -> Task<unit>` interface would force the
+pipeline engine to drive iteration, removing that flexibility.
+
+### Creating a sink
+
+The simplest sink is an in-memory collector — useful in tests:
+
+```fsharp
+open System.Collections.Generic
+open FSharp.Control
+
+let collectSink () =
+    let collected = List<'T>()
+    let sink : Sink<'T> = {
+        Write = fun stream -> task {
+            do! stream |> TaskSeq.iter (fun item -> collected.Add(item))
+        }
+    }
+    sink, collected
+```
+
+### Connecting a source to a sink
+
+Use `Pipeline.run` to wire a `Source` to a `Sink`:
+
+```fsharp
+do! Pipeline.run source sink
+```
+
+`Pipeline.run` simply passes the source stream to the sink's `Write`
+function:
+
+```fsharp
+let run (source: Source<'T>) (sink: Sink<'T>) : Task<unit> =
+    sink.Write(source.Read())
+```
