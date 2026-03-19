@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Xylem.Tests/Xylem.Tests.fsproj" />
+    <Project Path="src/Xylem/Xylem.fsproj" />
+  </Folder>
+</Solution>
