@@ -5,6 +5,7 @@ open Xunit
 open FSharp.Control
 open Xylem
 open Xylem.Domain
+open Xylem.Flow
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -106,4 +107,60 @@ let ``Pipeline run with empty source results in empty sink`` () = task {
     do! Pipeline.run source sink
 
     Assert.Empty(collected)
+}
+
+// ---------------------------------------------------------------------------
+// Flow<'TIn,'TOut>
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``Flow map transforms every item`` () = task {
+    let flow = Flow.map (fun x -> x * 2)
+    let input = taskSeq { yield 1; yield 2; yield 3 }
+
+    let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+    Assert.Equal<int list>([2; 4; 6], result)
+}
+
+[<Fact>]
+let ``Flow filter keeps only matching items`` () = task {
+    let flow = Flow.filter (fun x -> x % 2 = 0)
+    let input = taskSeq { yield 1; yield 2; yield 3; yield 4 }
+
+    let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+    Assert.Equal<int list>([2; 4], result)
+}
+
+[<Fact>]
+let ``Flow map then filter via compose`` () = task {
+    let flow = Flow.map (fun x -> x * 2) >>> Flow.filter (fun x -> x > 4)
+    let input = taskSeq { yield 1; yield 2; yield 3 }
+
+    let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+    Assert.Equal<int list>([6], result)
+}
+
+[<Fact>]
+let ``Flow map on empty stream yields empty stream`` () = task {
+    let flow = Flow.map (fun x -> x * 2)
+
+    let! result = flow.Transform(TaskSeq.empty) |> TaskSeq.toListAsync
+
+    Assert.Empty(result)
+}
+
+[<Fact>]
+let ``Pipeline runWith threads source through flow into sink`` () = task {
+    let source : Source<int> = {
+        Read = fun () -> taskSeq { yield 1; yield 2; yield 3; yield 4; yield 5 }
+    }
+    let flow   = Flow.filter (fun x -> x % 2 <> 0)
+    let sink, collected = collectSink<int>()
+
+    do! Pipeline.runWith source flow sink
+
+    Assert.Equal<int list>([1; 3; 5], List.ofSeq collected)
 }
