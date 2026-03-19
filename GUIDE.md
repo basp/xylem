@@ -194,3 +194,166 @@ it to the sink:
 let runWith (source: Source<'TIn>) (flow: Flow<'TIn,'TOut>) (sink: Sink<'TOut>) : Task<unit> =
     sink.Write(flow.Transform(source.Read()))
 ```
+
+---
+
+## Diagnostics model
+
+Xylem's diagnostics are designed around one principle: **failures must be
+loud, structured, and traceable.** A string error message is not enough —
+you need to know *what* failed, *why*, *where* in the pipeline, and *which
+record* was involved.
+
+### `Severity`
+
+Every diagnostic event carries a severity level:
+
+```fsharp
+type Severity =
+    | Info      // Something noteworthy; pipeline is healthy
+    | Warning   // Unexpected but recoverable; pipeline continues
+    | Error     // A record could not be processed; it is rejected
+    | Fatal     // Pipeline cannot continue; execution is aborted
+```
+
+### `ErrorKind`
+
+The `ErrorKind` discriminated union describes *what went wrong*. The
+well-known cases are machine-readable and pattern-matchable; `Custom` is
+the extension point for domain-specific categories:
+
+```fsharp
+type ErrorKind =
+    | SystemError           of exn
+    | IoError               of path: string * exn
+    | ValidationError       of field: string * reason: string
+    | BusinessRuleViolation of rule: string * reason: string
+    | PipelineError         of stage: string * exn
+    | Custom                of tag: string * data: Map<string, string>
+```
+
+**Adding a new well-known case is intentionally a breaking change.**
+Exhaustive pattern matches will fail to compile, forcing every caller to
+explicitly handle the new category. `Custom` is the safety valve when
+you need a domain-specific kind without modifying the library.
+
+### `DiagnosticEvent`
+
+A single structured event emitted during a pipeline run:
+
+```fsharp
+type DiagnosticEvent = {
+    Severity:    Severity
+    Kind:        ErrorKind
+    Stage:       string option        // which flow/stage emitted this
+    RecordIndex: int64 option         // 0-based record position, if applicable
+    Timestamp:   DateTimeOffset
+    Message:     string               // human-readable summary
+}
+```
+
+`Stage` and `RecordIndex` are both `option` because not every event is
+tied to a specific stage or record (e.g. a file-open failure has no
+record index; a pre-flight config check has no stage).
+
+### `PipelineResult`
+
+The structured outcome of a completed pipeline run:
+
+```fsharp
+type PipelineResult = {
+    RecordsRead:     int64
+    RecordsAccepted: int64
+    RecordsRejected: int64
+    RecordsFailed:   int64
+    Duration:        TimeSpan
+    Events:          DiagnosticEvent list
+}
+```
+
+`Events` is the source of truth. The counts are pre-computed
+conveniences — they are always consistent with `Events` and save callers
+from folding the list themselves.
+
+---
+
+## Design decision: how flows emit diagnostics
+
+This decision is worth documenting in full because the alternatives have
+non-obvious trade-offs.
+
+### Option A — `Result` in the stream (rejected)
+
+The most obviously functional approach: flows return
+`IAsyncEnumerable<Result<'TOut, DiagnosticEvent>>` so rejections are
+inline:
+
+```fsharp
+type Flow<'TIn, 'TOut> = {
+    Transform: IAsyncEnumerable<'TIn> -> IAsyncEnumerable<Result<'TOut, DiagnosticEvent>>
+}
+```
+
+**Why we didn't choose this:**
+
+- **Type explosion on composition.** After chaining two flows the return
+  type becomes
+  `IAsyncEnumerable<Result<Result<'C, DiagnosticEvent>, DiagnosticEvent>>`.
+  A `bind`-style compose flattens it, but the ergonomics deteriorate
+  quickly and the engine must understand the nesting.
+- **Warnings are unrepresentable.** A record that *passes* validation but
+  triggers a warning (e.g. a coerced null) must be `Ok` — there is no
+  channel for "healthy record, but here is a note". You would need
+  `Result<'TOut * DiagnosticEvent list, DiagnosticEvent list>`, which is
+  a very complex return type.
+- **Most flows don't reject anything.** `map` and `filter` are pure
+  transforms. Forcing all flows to wrap their output in `Result` for the
+  sake of a few validation flows is a poor trade.
+
+### Option B — `ExecutionContext` with `Emit` (chosen, deferred)
+
+A context object is threaded through diagnostics-aware combinators:
+
+```fsharp
+type ExecutionContext = {
+    Emit: DiagnosticEvent -> unit
+    // future: CancellationToken, BatchSize, ...
+}
+```
+
+Flows that need to emit events receive a context at *construction time*,
+not as part of the `Flow` type itself:
+
+```fsharp
+// Pure flow — no context needed, clean signature
+let doubled = Flow.map (fun x -> x * 2)
+
+// Validating flow — opts into context at construction time
+let validateAge ctx =
+    Flow.validate ctx (fun person ->
+        if person.Age < 0 then
+            Error (ValidationError("Age", "must be >= 0"))
+        else
+            Ok person)
+```
+
+**Why this works:**
+
+- `Flow<'TIn,'TOut>` stays exactly as it is. No type changes, no
+  breaking changes to existing combinators.
+- Any event at any time: warnings on healthy records, multiple errors per
+  record, informational events mid-stream — all natural.
+- Pure flows (`map`, `filter`, `compose`) remain completely side-effect
+  free and need no context.
+- Only flows that *opt in* to diagnostics touch `ctx`.
+
+**The drawback:** `ctx.Emit` is a side effect. Flows that use it are no
+longer purely functional — they produce output *and* write to the context.
+This is a deliberate pragmatic choice. Real ETL pipelines inherently
+produce side effects (writing files, hitting databases); pretending
+diagnostics can be fully pure adds complexity without benefit.
+
+**Deferred:** `ExecutionContext` and `ctx`-aware combinators (`validate`,
+`enrich`, etc.) are introduced in the next increment. The diagnostics
+*types* (`Severity`, `ErrorKind`, `DiagnosticEvent`, `PipelineResult`)
+are defined now so tests and flows can reference them immediately.
