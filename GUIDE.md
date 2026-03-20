@@ -500,6 +500,123 @@ already-cancelled token throws immediately without touching the source.
 
 ---
 
+## Connectors
+
+A **connector** is a `Source<'T>` or `Sink<'T>` that ties the pipeline
+to a specific data store or transport. The core library ships one
+connector out of the box: `Xylem.Connectors.InMemory`. File, JSON/CSV,
+database, and queue connectors are planned for future releases.
+
+### `Xylem.Connectors.InMemory`
+
+The in-memory connector requires no I/O and no external dependencies.
+It is the go-to choice for tests, examples, and simple one-off
+pipelines.
+
+```fsharp
+open Xylem.Connectors
+```
+
+#### `InMemory.source`
+
+Creates a `Source<'T>` from any `seq<'T>`-compatible value — lists,
+arrays, and sequences all work:
+
+```fsharp
+let source = InMemory.source [1; 2; 3; 4; 5]
+let source = InMemory.source [| "a"; "b"; "c" |]
+let source = InMemory.source (seq { for i in 1..100 do yield i })
+```
+
+Each call to `source.Read()` produces a fresh, independent
+`IAsyncEnumerable<'T>` — the source behaves exactly like any other
+Xylem source. Multiple runs over the same source are safe as long as
+the underlying sequence is re-iterable (lists and arrays always are;
+one-shot `seq` expressions are not).
+
+#### `InMemory.sink`
+
+Creates a `Sink<'T>` that accumulates every written item into an
+internal buffer. Returns the sink together with a **reader function**
+that snapshots the collected items on demand:
+
+```fsharp
+let sink, read = InMemory.sink ()
+
+do! Pipeline.runWith source flow sink
+
+let items : int list = read ()   // ["item-2"; "item-4"; ...]
+```
+
+Each call to `read ()` returns a fresh `'T list` — the same items, a
+different list object. This mirrors the `ExecutionContext.ReadEvents`
+pattern and makes call-site assertions straightforward:
+
+```fsharp
+Assert.Equal<int list>([2; 4], read ())
+```
+
+#### Full pipeline example
+
+```fsharp
+open Xylem.Connectors
+
+let ctx    = ExecutionContext.``default`` ()
+let source = InMemory.source [1; -2; 3; -4; 5]
+let flow   = Flow.validate "check-positive" ctx (fun x ->
+    if x > 0 then Ok x
+    else Result.Error (ValidationError("value", "must be positive")))
+let sink, read = InMemory.sink ()
+
+let! result = Pipeline.runWithContext ctx source flow sink
+
+printfn $"Accepted: %A{read ()}"          // [1; 3; 5]
+printfn $"Rejected: %d{result.RecordsRejected}"  // 2
+```
+
+---
+
+### Design decisions — `InMemory`
+
+#### `#seq<'T>` vs `seq<'T>` for the source input
+
+`InMemory.source` accepts `#seq<'T>` (a flexible type) rather than
+`seq<'T>`. The difference: with `seq<'T>`, passing a `list` or
+`array` boxes it into a plain `seq` before the function is entered —
+the static type is lost. With `#seq<'T>`, the compiler accepts any
+subtype of `IEnumerable<'T>` without an upcast, keeping the most
+specific type at the call site.
+
+In practice the difference is invisible at runtime, but `#seq<'T>` is
+the idiomatic F# choice for functions that accept *any* sequence.
+
+#### `unit -> 'T list` reader vs returning the list directly
+
+`InMemory.sink` returns `Sink<'T> * (unit -> 'T list)` rather than
+`Sink<'T> * 'T list`. If it returned the list directly, the list would
+be captured at construction time — before any items have been written —
+and would always be empty.
+
+The reader function defers evaluation: each call snapshots the buffer
+*at that moment*, which is what tests and post-run inspection actually
+need. This is the same deferred-reader pattern used by
+`ExecutionContext.ReadEvents`.
+
+#### `'T list` vs `ResizeArray<'T>` in the snapshot
+
+The reader converts the internal `ResizeArray<'T>` to a `'T list` on
+every call via `List.ofSeq`. This means:
+
+- **Immutable** — callers can hold onto a snapshot without worrying
+  about it changing under them.
+- **Idiomatic** — F# assertion helpers and pattern matching work
+  naturally on lists.
+- **One allocation per read** — acceptable for the test/example use
+  case this connector targets; not a concern for production connectors
+  where the sink itself owns the write strategy.
+
+---
+
 ## Design decision: how flows emit diagnostics
 
 This decision is worth documenting in full because the alternatives have
