@@ -361,6 +361,9 @@ module Pipeline =
     /// Runs a pipeline under an <c>ExecutionContext</c> and returns a structured
     /// <c>PipelineResult</c>. Counts every record emitted by the source, measures
     /// wall-clock duration, and collects all diagnostic events from <c>ctx</c>.
+    /// Any unhandled exception (e.g. a connector I/O failure) is caught, emitted
+    /// as a <c>Fatal</c> diagnostic event, and the function returns a well-formed
+    /// <c>PipelineResult</c> reflecting the partial run rather than faulting the task.
     /// </summary>
     let runWithContext
             (ctx:    ExecutionContext)
@@ -370,9 +373,8 @@ module Pipeline =
             : Task<PipelineResult> =
         task {
             ctx.CancellationToken.ThrowIfCancellationRequested()
-            let sw      = System.Diagnostics.Stopwatch.StartNew()
-            // TODO: maybe use mutable instead of ref?
-            let count   = ref 0L
+            let sw    = System.Diagnostics.Stopwatch.StartNew()
+            let count = ref 0L
 
             let countingSource : Source<'TIn> = {
                 Read = fun () ->
@@ -382,8 +384,18 @@ module Pipeline =
                         item)
             }
 
-            do! runWith countingSource flow sink
-            sw.Stop()
+            try
+                do! runWith countingSource flow sink
+            with ex ->
+                ctx.Emit {
+                    Severity    = Severity.Fatal
+                    Kind        = ErrorKind.SystemError ex
+                    Stage       = None
+                    RecordIndex = None
+                    Timestamp   = DateTimeOffset.UtcNow
+                    Message     = $"Pipeline failed with unhandled exception: {ex.Message}"
+                }
 
+            sw.Stop()
             return PipelineResult.fromEvents count.Value sw.Elapsed (ctx.ReadEvents())
         }

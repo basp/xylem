@@ -496,6 +496,41 @@ for e in result.Events do
 The runner checks `ctx.CancellationToken` before starting so that an
 already-cancelled token throws immediately without touching the source.
 
+### Unhandled exceptions — guaranteed `PipelineResult`
+
+`runWithContext` wraps the inner run in a `try/catch`. If any unhandled
+exception escapes — from a connector, a flow, or a sink — the runner
+catches it, emits one `Fatal`-severity `DiagnosticEvent`, stops the
+stopwatch, and returns a well-formed `PipelineResult` reflecting the
+partial run:
+
+```fsharp
+// result is always returned — even on hard failures
+let! result = Pipeline.runWithContext ctx source flow sink
+
+if result.RecordsFailed > 0L then
+    for e in result.Events |> List.filter (fun e -> e.Severity = Fatal) do
+        printfn $"FATAL: {e.Message}"
+```
+
+The emitted event uses `SystemError ex` as the `Kind`, has no `Stage`
+or `RecordIndex` (the failure is not tied to a specific record), and
+carries the exception's message as the human-readable summary.
+
+**What this guarantees:**
+
+| Failure scenario | Before | After |
+|---|---|---|
+| Connector throws on open | Faulted `Task`, no result | `PipelineResult` with `RecordsFailed = 1` |
+| Flow throws mid-stream | Faulted `Task`, events lost | Result with partial counts + `Fatal` event |
+| Duration | Never measured | Always measured, even on failure |
+| Events emitted before crash | Only via `ctx.ReadEvents()` in caller's catch | Included in `result.Events` |
+
+> **Note:** `OperationCanceledException` (from `CancellationToken`) is
+> intentionally **not** caught. A cancelled pipeline is not a pipeline
+> failure — it is a deliberate stop signal, and the exception should
+> propagate normally so callers can distinguish cancellation from error.
+
 ---
 
 ## Connectors
@@ -696,3 +731,315 @@ diagnostics can be fully pure adds complexity without benefit.
 `ExecutionContext` and the ctx-aware combinators (`validate`, `enrich`)
 are now implemented. Pure flows (`map`, `filter`, `compose`) remain
 completely side-effect free and need no context.
+
+---
+
+## Design decision: exception handling in `runWithContext`
+
+### The problem
+
+`runWithContext` is the only place that can return a structured
+`PipelineResult`. Before this decision was made, any unhandled exception
+— from a connector opening a file, a flow throwing mid-stream, a sink
+failing to write — caused the `Task<PipelineResult>` itself to fault.
+This meant:
+
+- The structured result was never returned; callers had to use a raw
+  `try/catch` to get anything.
+- `RecordsFailed` was always 0, even on hard failures — the count is
+  derived from `Fatal` events, which were never emitted.
+- `Duration` was never measured.
+- Events emitted *before* the crash were stranded in `ctx` and only
+  reachable if the caller explicitly called `ctx.ReadEvents()` in a
+  catch block — a non-obvious escape hatch.
+
+### Three options considered
+
+**Option A — leave exceptions unhandled (rejected)**
+
+Connectors throw, callers wrap the runner in `try/catch`. Simple and
+honest, but `PipelineResult` never reaches the caller on hard failures
+and `Fatal` events serve no purpose for connector-level errors.
+
+**Option B — catch in `runWithContext` (chosen)**
+
+The engine wraps the inner run in `try/catch`. Any unhandled exception
+is caught, emitted as a `Fatal` `DiagnosticEvent`, and the runner returns
+a well-formed `PipelineResult` reflecting the partial run. The `IoError`
+case on `ErrorKind` — which existed in the model but was previously
+unreachable — is now the natural carrier for connector I/O failures.
+
+**Option C — connectors accept `ctx` and emit `Fatal` themselves (rejected)**
+
+Connectors would be responsible for catching their own errors and emitting
+diagnostics. This is consistent with how flows handle per-record errors,
+but it forces every connector to accept and thread an `ExecutionContext` —
+complicating the `Source<'T>` / `Sink<'T>` types and coupling connectors
+to the diagnostics model for what are fundamentally infrastructure errors.
+
+### Why Option B
+
+- `Source<'T>` and `Sink<'T>` stay context-free. Connectors have no
+  dependency on `ExecutionContext`.
+- `PipelineResult` is always returned — callers can always inspect
+  `result.RecordsFailed` and `result.Events` regardless of how the run
+  ended.
+- `Fatal` in the diagnostics model becomes meaningful end-to-end: a
+  connector I/O failure, a mid-stream flow exception, and a cancelled
+  run can all be distinguished by `Severity` and `Kind`.
+- The catch is in one place only — the engine — not scattered across
+  every connector.
+
+### Cancellation is not caught
+
+`OperationCanceledException` is deliberately excluded from the catch.
+Cancellation is not a failure — it is a deliberate stop signal. Catching
+it would suppress the caller's ability to detect that the pipeline was
+cancelled rather than failed. The pre-existing
+`ThrowIfCancellationRequested()` check at the top of `runWithContext`
+continues to propagate normally.
+
+---
+## File Connectors
+
+### `Xylem.Connectors.File`
+
+The file connector reads from and writes to the local file system.
+Like all Xylem connectors, it lives in `Xylem.Connectors`:
+
+```fsharp
+open Xylem.Connectors
+```
+
+#### Responsibility boundary — lines only
+
+`File.source` produces `string` lines. `File.sink` consumes `string`
+lines. **Parsing and serialisation are not the connector's job** — they
+belong in a `Flow` sitting between source and sink.
+
+This keeps each piece focused:
+
+```
+File.source "input.csv"
+  → Flow.map parseCsvRow       // string → Row
+  → Flow.validate "check" ctx validator
+  → Flow.map formatCsvRow      // Row → string
+  → File.sink "output.csv"
+```
+
+A connector that bundled its own CSV or JSON parser would duplicate the
+format connectors and force every caller to use its specific parser
+whether they wanted to or not.
+
+#### `File.sourceFrom` — factory constructor
+
+The primary constructor. Accepts a factory function that produces a
+`TextReader` and wraps it as a `Source<string>`:
+
+```fsharp
+File.sourceFrom : (unit -> TextReader) -> Source<string>
+```
+
+Each call to `source.Read()` invokes the factory to obtain a fresh
+`TextReader`, yields its lines one at a time, and disposes the reader
+when enumeration ends. The factory is called lazily — only when the
+first item is pulled from the stream.
+
+This is the overload to use in tests (see *Testing without I/O* below).
+
+#### `File.source` — convenience overload
+
+Wraps `sourceFrom` with a `StreamReader` factory for a file path:
+
+```fsharp
+let source : Source<string> = File.source "data.csv"
+```
+
+Equivalent to:
+
+```fsharp
+let source = File.sourceFrom (fun () -> new StreamReader("data.csv"))
+```
+
+Each call to `source.Read()` opens a fresh `StreamReader`, streams
+lines one at a time, and disposes the reader on completion, cancellation,
+or exception. The file is never fully loaded into memory.
+
+Empty lines are yielded as empty strings — they are not skipped. Use
+`Flow.filter (fun line -> line <> "")` to drop them upstream.
+
+If the file does not exist or cannot be opened, the `StreamReader`
+constructor throws during the first iteration. The exception is caught
+by `Pipeline.runWithContext`, which emits a `Fatal` diagnostic and
+returns a well-formed `PipelineResult`.
+
+#### `File.sinkFrom` — factory constructor
+
+The primary constructor. Accepts a factory function that produces a
+`TextWriter` and wraps it as a `Sink<string>`:
+
+```fsharp
+File.sinkFrom : (unit -> TextWriter) -> Sink<string>
+```
+
+`Write` invokes the factory once, writes each string as a line via
+`TextWriter.WriteLine`, then disposes the writer — whether the stream
+completes normally or throws.
+
+This is the overload to use in tests (see *Testing without I/O* below).
+
+#### `File.sink` — convenience overloads
+
+Wraps `sinkFrom` with a `StreamWriter` factory for a file path:
+
+```fsharp
+// Overwrite (default)
+let sink : Sink<string> = File.sink "output.csv"
+
+// With explicit options
+let sink = File.sink "output.csv" { FileSinkOptions.Default with Append = true }
+```
+
+The default behaviour **overwrites** the file if it already exists —
+pipelines are designed to be re-runnable, and appending to a previous
+run's output would produce corrupt data. Append is opt-in via
+`FileSinkOptions`.
+
+#### `FileSinkOptions`
+
+```fsharp
+type FileSinkOptions = {
+    Append:   bool
+    Encoding: System.Text.Encoding
+}
+```
+
+| Field | Default | Purpose |
+|---|---|---|
+| `Append` | `false` | When `true`, new lines are appended to an existing file rather than overwriting it |
+| `Encoding` | `UTF8` (no BOM) | Character encoding for the output file |
+
+#### Resource lifetime
+
+| Connector | `TextReader`/`TextWriter` opened | Closed |
+|---|---|---|
+| `File.sourceFrom` | At first `MoveNextAsync()` call | When enumeration ends (completion, cancellation, or exception) |
+| `File.sinkFrom` | At the start of `Write(stream)` | When `Write` returns (success or exception) |
+
+Both use `use` bindings so disposal is guaranteed regardless of how the
+stream terminates. Multiple calls to `source.Read()` are safe — each
+call invokes the factory independently.
+
+#### Testing without I/O
+
+Because both primary constructors accept a factory function, tests
+substitute `StringReader` and `StringWriter` — standard .NET types —
+in place of real file handles. No temp files, no cleanup, no
+environment dependencies:
+
+```fsharp
+// Source — inject a StringReader
+let source = File.sourceFrom (fun () -> new StringReader("alice\nbob\ncarol"))
+
+let! lines = source.Read() |> TaskSeq.toListAsync
+// lines = ["alice"; "bob"; "carol"]
+
+// Sink — inject a StringWriter and inspect what was written
+let sw   = new StringWriter()
+let sink = File.sinkFrom (fun () -> sw :> TextWriter)
+
+do! sink.Write(taskSeq { yield "x"; yield "y" })
+// sw.ToString() = "x\r\ny\r\n"  (or "x\ny\n" on Unix)
+```
+
+The convenience overloads (`File.source path`, `File.sink path`) are
+integration-tested separately as thin wrappers over `sourceFrom`/`sinkFrom`.
+
+#### Full pipeline example
+
+```fsharp
+open Xylem
+open Xylem.Connectors
+open Xylem.Domain
+
+type Row = { Name: string; Age: int }
+
+let parseLine (line: string) : Result<Row, ErrorKind> =
+    match line.Split(',') with
+    | [| name; age |] ->
+        match System.Int32.TryParse(age) with
+        | true, n -> Ok { Name = name.Trim(); Age = n }
+        | _       -> Result.Error (ValidationError("Age", "not a valid integer"))
+    | _ -> Result.Error (ValidationError("line", "expected 2 comma-separated fields"))
+
+let formatLine (row: Row) : string = $"{row.Name},{row.Age}"
+
+let ctx = ExecutionContext.``default`` ()
+
+let source = File.source "people.csv"
+let flow =
+    Flow.compose
+        (Flow.enrich "parse" ctx parseLine)
+        (Flow.compose
+            (Flow.validate "check-age" ctx (fun row ->
+                if row.Age >= 0 then Ok row
+                else Result.Error (ValidationError("Age", "must be non-negative"))))
+            (Flow.map formatLine))
+let sink = File.sink "people-clean.csv"
+
+let! result = Pipeline.runWithContext ctx source flow sink
+
+printfn $"Read: %d{result.RecordsRead}  Accepted: %d{result.RecordsAccepted}  Rejected: %d{result.RecordsRejected}"
+```
+
+---
+
+### Design decisions — `File`
+
+#### Lines only, not generic
+
+The alternative would be `File.source<'T>` with a built-in
+`string -> 'T` deserialiser parameter. This conflates connector and
+format concerns: the connector would need to know about CSV, JSON, or
+whatever format the caller chooses.
+
+Keeping connectors as `Source<string>` / `Sink<string>` means format
+handling belongs in a `Flow`, which is the correct abstraction for
+record-level transforms. The upcoming JSON and CSV connectors will
+follow the same principle — they will be thin wrappers that compose a
+`File.source` with a parsing flow.
+
+#### Factory functions for testability
+
+Accepting `unit -> TextReader` and `unit -> TextWriter` rather than a
+raw path keeps the connector testable without any mocking framework or
+file system abstraction layer. `StringReader` and `StringWriter` are
+standard .NET types that implement `TextReader` and `TextWriter`
+respectively — no new interfaces or dependencies are needed.
+
+The convenience path-based overloads (`File.source`, `File.sink`) are
+thin wrappers that supply the `StreamReader`/`StreamWriter` factory.
+They carry no logic of their own, so unit tests can focus entirely on
+the `sourceFrom`/`sinkFrom` behaviour.
+
+#### Overwrite by default
+
+Append-by-default would silently corrupt output on a rerun.
+Overwrite-by-default makes pipelines idempotent and rerunnable without
+manual cleanup. Append is opt-in via `FileSinkOptions`.
+
+#### `UTF-8` without BOM
+
+UTF-8 without BOM is the cross-platform default. BOM causes problems
+with many Unix tools and some parsers. Callers that need BOM or a
+different encoding can supply a custom `Encoding` via `FileSinkOptions`.
+
+#### Context-free connectors
+
+`File.source` and `File.sink` do not accept an `ExecutionContext`. I/O
+failures at the connector level (file not found, permission denied) are
+fatal and unrecoverable — they are not per-record events. The engine's
+`try/catch` in `runWithContext` handles them uniformly, emitting a
+`Fatal` diagnostic and returning a well-formed `PipelineResult`. See the
+*"Design decision: exception handling in `runWithContext`"* section for
+full details.
