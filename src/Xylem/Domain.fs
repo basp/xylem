@@ -174,6 +174,8 @@ module Domain =
         Emit:              Pulse -> unit
         /// <summary>Returns all pulses emitted so far in this run, in emission order.</summary>
         ReadEvents:        unit -> Pulse list
+        /// <summary>Clears all pulses emitted so far.</summary>
+        ClearEvents:       unit -> unit
         /// <summary>Retry policy for the pipeline run. Defaults to <c>NoRetry</c>.</summary>
         RetryPolicy:       RetryPolicy
     }
@@ -246,6 +248,7 @@ module ExecutionContext =
           BatchSize         = batchSize
           Emit              = fun e -> lock gate (fun () -> events.Add(e))
           ReadEvents        = fun () -> lock gate (fun () -> List.ofSeq events)
+          ClearEvents       = fun () -> lock gate (fun () -> events.Clear())
           RetryPolicy       = NoRetry }
 
     /// <summary>

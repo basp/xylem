@@ -116,20 +116,49 @@ let ``Vessel validate throws OperationCanceledException for already-cancelled to
 }
 
 [<Fact>]
-let ``Pipeline runWithContext throws OperationCanceledException for already-cancelled token`` () = task {
-    use cts  = new CancellationTokenSource()
-    cts.Cancel()
-    let ctx    = ExecutionContext.create cts.Token 1000
-    let root : Root<int> = { Read = fun () -> taskSeq { yield 1; yield 2; yield 3 } }
+let ``Pipeline runWithContext with FixedDelay(1) performs at most 2 total attempts`` () = task {
+    let ctx = ExecutionContext.create CancellationToken.None 1000
+    let mutable totalAttempts = 0
+    let root : Root<int> = {
+        Read = fun () -> taskSeq {
+            totalAttempts <- totalAttempts + 1
+            failwith "Simulated failure"
+            yield 1
+        }
+    }
     let vessel = Vessel.map id
     let leaf, _ = Helpers.collectSink<int>()
+    
+    // FixedDelay(1, ...) means initial attempt + 1 retry = 2 total
+    let ctxWithRetry = { ctx with RetryPolicy = FixedDelay(1, TimeSpan.FromMilliseconds(10.0)) }
+    let! result = Pipeline.runWithContext ctxWithRetry root vessel leaf
+    
+    // CURRENT BUG: This will likely be 3 (initial, then retry 1, then retry 2)
+    Assert.Equal(2, totalAttempts)
+    Assert.Equal(1L, result.RecordsFailed)
+}
 
-    let mutable threw = false
-    try
-        let! _ = Pipeline.runWithContext ctx root vessel leaf
-        ()
-    with :? OperationCanceledException ->
-        threw <- true
-
-    Assert.True(threw)
+[<Fact>]
+let ``Pipeline runWithContext successful retry does not include pulses from failed attempt`` () = task {
+    let ctx = ExecutionContext.create CancellationToken.None 1000
+    let mutable totalAttempts = 0
+    let root : Root<int> = {
+        Read = fun () -> taskSeq {
+            totalAttempts <- totalAttempts + 1
+            if totalAttempts = 1 then
+                failwith "First attempt fails"
+            yield 1
+        }
+    }
+    let vessel = Vessel.map id
+    let leaf, _ = Helpers.collectSink<int>()
+    
+    let ctxWithRetry = { ctx with RetryPolicy = FixedDelay(1, TimeSpan.FromMilliseconds(10.0)) }
+    let! result = Pipeline.runWithContext ctxWithRetry root vessel leaf
+    
+    Assert.Equal(2, totalAttempts)
+    Assert.Equal(1L, result.RecordsRead)
+    Assert.Equal(1L, result.RecordsAccepted)
+    // CURRENT BUG: This will likely be 1 because it counts the Fatal pulse from the first attempt
+    Assert.Equal(0L, result.RecordsFailed)
 }

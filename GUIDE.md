@@ -14,7 +14,7 @@ then follow the links as needed.
 | [Execution Context](docs/execution-context.md) | `ExecutionContext` + context-aware combinators (`validate`, `enrich`, `batch`) |
 | [Running Pipelines](docs/pipelines.md) | `Pipeline.runWithContext`, guaranteed `Harvest`, failure handling |
 | [Error Handling](docs/error-handling.md) | Per-record rejections, pipeline-level crashes, inspecting results |
-| [Retry Policy](docs/retry-policy.md) | `RetryPolicy` configuration, behaviour, and diagnostic events |
+| [Retry Policy](docs/retry-policy.md) | `RetryPolicy` configuration, behaviour, and cumulative retry diagnostics |
 | [Connectors](docs/connectors.md) | Built-in `InMemory` and `File` connectors |
 | [Connector Authoring](docs/connector-authoring.md) | Writing custom connectors — sources, sinks, and testing patterns |
 | [Design Decisions](docs/design-decisions.md) | Architectural rationale — trade-offs and alternatives considered |
