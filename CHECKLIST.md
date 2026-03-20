@@ -17,19 +17,19 @@
 ### 2. Diagnostics model
 - [x] Define `DiagnosticEvent` discriminated union
 - [x] Structured warnings and errors
-- [ ] Execution timing
+- [x] Execution timing
 - [x] Counts: read / accepted / rejected / failed
 - [ ] Per-stage summaries
 
 ### 3. Error handling strategy
-- [ ] `Result`-based outcomes throughout public API
-- [ ] Recoverable vs fatal error distinction
-- [ ] Rejection path for invalid records
+- [x] `Result`-based outcomes throughout public API
+- [x] Recoverable vs fatal error distinction
+- [x] Rejection path for invalid records
 - [x] Exception capture with context
 
 ### 4. Basic execution engine
 - [x] Async linear pipeline run (`Task<_>`)
-- [ ] Cancellation support
+- [x] Cancellation support
 - [ ] Basic retry policy
 - [x] Deterministic stage ordering
 
@@ -38,7 +38,7 @@
 - [x] `filter`
 - [x] `validate`
 - [ ] `batch`
-- [ ] `enrich`
+- [x] `enrich`
 - [ ] Simple routing / branching
 
 ### 6. Batch processing
@@ -61,7 +61,7 @@
 - [x] Pure function coverage for transforms
 - [x] Full pipeline integration test
 - [x] Diagnostics assertions
-- [ ] Failure-path tests
+- [x] Failure-path tests
 
 ### 11. Public API documentation
 - [ ] Quickstart guide
