@@ -69,11 +69,11 @@ let ``File sourceFrom Read called twice calls factory twice`` () = task {
 [<Fact>]
 let ``File sourceFrom factory throwing surfaces as Fatal in PipelineResult`` () = task {
     let ctx    = ExecutionContext.``default`` ()
-    let source : Source<string> = File.sourceFrom (fun () -> failwith "cannot open file")
-    let flow   = Flow.map id
-    let sink, _ = Helpers.collectSink<string>()
+    let root : Root<string> = File.sourceFrom (fun () -> failwith "cannot open file")
+    let vessel = Vessel.map id
+    let leaf, _ = Helpers.collectSink<string>()
 
-    let! result = Pipeline.runWithContext ctx source flow sink
+    let! result = Pipeline.runWithContext ctx root vessel leaf
 
     Assert.Equal(1L, result.RecordsFailed)
     Assert.Equal(Fatal, result.Events[0].Severity)
@@ -121,20 +121,20 @@ let ``File sourceFrom and sinkFrom round-trip all lines`` () = task {
 // ---------------------------------------------------------------------------
 
 [<Fact>]
-let ``File sourceFrom and sinkFrom round-trip through a flow`` () = task {
+let ``File sourceFrom and sinkFrom round-trip through a vessel`` () = task {
     let ctx    = ExecutionContext.``default`` ()
     let source = File.sourceFrom (fun () -> new StringReader("1\n2\nbad\n3"))
     let sw     = new StringWriter()
     let sink   = File.sinkFrom (fun () -> sw :> TextWriter)
-    let flow =
-        Flow.compose
-            (Flow.enrich "parse-int" ctx (fun (line: string) ->
+    let vessel =
+        Vessel.compose
+            (Vessel.enrich "parse-int" ctx (fun (line: string) ->
                 match Int32.TryParse(line) with
                 | true, n -> Ok n
                 | _       -> Result.Error (ValidationError("line", $"'{line}' is not an integer"))))
-            (Flow.map string)
+            (Vessel.map string)
 
-    let! result = Pipeline.runWithContext ctx source flow sink
+    let! result = Pipeline.runWithContext ctx source vessel sink
 
     Assert.Equal(4L, result.RecordsRead)
     Assert.Equal(3L, result.RecordsAccepted)

@@ -7,15 +7,15 @@
 
   <ItemGroup>
     <Compile Include="Helpers.fs" />
-    <Compile Include="SourceTests.fs" />
-    <Compile Include="SinkTests.fs" />
+    <Compile Include="RootTests.fs" />
+    <Compile Include="LeafTests.fs" />
     <Compile Include="ExecutionContextTests.fs" />
-    <Compile Include="FlowTests.fs" />
+    <Compile Include="VesselTests.fs" />
     <Compile Include="PipelineTests.fs" />
     <Compile Include="InMemoryTests.fs" />
     <Compile Include="FileConnectorTests.fs" />
-    <Compile Include="DiagnosticsTests.fs" />
-    <Compile Include="StageSummaryTests.fs" />
+    <Compile Include="PulseTests.fs" />
+    <Compile Include="RingTests.fs" />
     <Compile Include="RetryTests.fs" />
     <Compile Include="EmitThreadSafetyTests.fs" />
   </ItemGroup>

@@ -1,4 +1,4 @@
-module StageSummaryTests
+module RingTests
 
 open System
 open Xunit
@@ -7,7 +7,7 @@ open Xylem.Domain
 
 [<Fact>]
 let ``summarizeByStage returns empty list for no events`` () =
-    let result = PipelineResult.summarizeByStage []
+    let result = Harvest.summarizeByStage []
     Assert.Empty(result)
 
 [<Fact>]
@@ -17,7 +17,7 @@ let ``summarizeByStage groups events by stage`` () =
         { Helpers.makeEvent Error (ValidationError("Name", "empty"))   with Stage = Some "validate" }
         { Helpers.makeEvent Warning (Custom("coerced", Map.empty))     with Stage = Some "enrich" }
     ]
-    let summaries = PipelineResult.summarizeByStage events
+    let summaries = Harvest.summarizeByStage events
     Assert.Equal(2, summaries.Length)
 
     let validate = summaries |> List.find (fun s -> s.Stage = Some "validate")
@@ -41,7 +41,7 @@ let ``summarizeByStage includes stageless events under None`` () =
         Helpers.makeEvent Warning (Custom("retry", Map.empty))
         { Helpers.makeEvent Error (ValidationError("x", "bad")) with Stage = Some "check" }
     ]
-    let summaries = PipelineResult.summarizeByStage events
+    let summaries = Harvest.summarizeByStage events
     Assert.Equal(2, summaries.Length)
 
     let pipeline = summaries |> List.find (fun s -> s.Stage = None)
@@ -60,7 +60,7 @@ let ``summarizeByStage counts all severity levels`` () =
         { Helpers.makeEvent Error   (Custom("c", Map.empty)) with Stage = Some "s1" }
         { Helpers.makeEvent Fatal   (Custom("d", Map.empty)) with Stage = Some "s1" }
     ]
-    let summaries = PipelineResult.summarizeByStage events
+    let summaries = Harvest.summarizeByStage events
     Assert.Equal(1, summaries.Length)
     let s = summaries.Head
     Assert.Equal(2L, s.InfoCount)
@@ -76,7 +76,7 @@ let ``summarizeByStage preserves stage ordering by first occurrence`` () =
         { Helpers.makeEvent Info (Custom("b", Map.empty)) with Stage = Some "first" }
         { Helpers.makeEvent Info (Custom("c", Map.empty)) with Stage = Some "second" }
     ]
-    let summaries = PipelineResult.summarizeByStage events
+    let summaries = Harvest.summarizeByStage events
     Assert.Equal(2, summaries.Length)
     Assert.Equal(Some "second", summaries[0].Stage)
     Assert.Equal(Some "first",  summaries[1].Stage)

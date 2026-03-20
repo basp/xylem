@@ -7,10 +7,10 @@ open System.Threading.Tasks
 module Domain =
 
     /// <summary>
-    /// Produces a stream of records of type <c>'T</c>.
+    /// The origin of a data pipeline — absorbs records from the ground up.
     /// Calling <c>Read ()</c> starts a fresh, independent stream each time.
     /// </summary>
-    type Source<'T> = {
+    type Root<'T> = {
         /// <summary>
         /// Starts a fresh, independent stream of records of type <c>'T</c>.
         /// </summary>
@@ -18,21 +18,21 @@ module Domain =
     }
 
     /// <summary>
-    /// Consumes a stream of records of type <c>'T</c>.
-    /// The sink owns iteration, allowing bulk operations and internal buffering.
+    /// The destination of a data pipeline — where records are delivered.
+    /// The leaf owns iteration, allowing bulk operations and internal buffering.
     /// </summary>
-    type Sink<'T> = {
+    type Leaf<'T> = {
         /// <summary>
-        /// Consumes a stream of records of type <c>'T</c> and performs the sink operation.
+        /// Consumes a stream of records of type <c>'T</c> and performs the write operation.
         /// </summary>
         Write: IAsyncEnumerable<'T> -> Task<unit>
     }
 
     /// <summary>
-    /// Transforms a stream of <c>'TIn</c> records into a stream of <c>'TOut</c> records.
-    /// The transform is lazy — no work happens until the stream is consumed.
+    /// A xylem vessel that carries records from <c>'TIn</c> to <c>'TOut</c>.
+    /// The transform is lazy — no sap flows until the stream is consumed.
     /// </summary>
-    type Flow<'TIn, 'TOut> = {
+    type Vessel<'TIn, 'TOut> = {
         /// <summary>
         /// Applies the underlying transform from <c>'TIn</c> to <c>'TOut</c>.
         /// </summary>
@@ -101,9 +101,9 @@ module Domain =
         | RetryError            of attempt: int * exn
 
     /// <summary>
-    /// A single structured event emitted during a pipeline run.
+    /// A single structured pulse emitted during a pipeline run.
     /// </summary>
-    type DiagnosticEvent = {
+    type Pulse = {
         /// <summary>
         /// How severe the event is.
         /// </summary>
@@ -113,19 +113,19 @@ module Domain =
         /// </summary>
         Kind:        ErrorKind
         /// <summary>
-        /// The flow or stage that emitted this event, if applicable.
+        /// The vessel or stage that emitted this pulse, if applicable.
         /// </summary>
         Stage:       string option
         /// <summary>
-        /// 0-based index of the record that triggered this event, if applicable.
+        /// 0-based index of the record that triggered this pulse, if applicable.
         /// </summary>
         RecordIndex: int64 option
         /// <summary>
-        /// When the event occurred.
+        /// When the pulse occurred.
         /// </summary>
         Timestamp:   DateTimeOffset
         /// <summary>
-        /// Human-readable summary of the event.
+        /// Human-readable summary of the pulse.
         /// </summary>
         Message:     string
     }
@@ -154,41 +154,41 @@ module Domain =
         /// <summary>Preferred number of records per batch for batch-aware sinks and flows.</summary>
         BatchSize:         int
         /// <summary>
-        /// Emits a structured diagnostic event for the current run.
-        /// Called by flows that reject or warn about individual records.
+        /// Emits a structured pulse for the current run.
+        /// Called by vessels that reject or warn about individual records.
         /// </summary>
-        Emit:              DiagnosticEvent -> unit
-        /// <summary>Returns all events emitted so far in this run, in emission order.</summary>
-        ReadEvents:        unit -> DiagnosticEvent list
+        Emit:              Pulse -> unit
+        /// <summary>Returns all pulses emitted so far in this run, in emission order.</summary>
+        ReadEvents:        unit -> Pulse list
         /// <summary>Retry policy for the pipeline run. Defaults to <c>NoRetry</c>.</summary>
         RetryPolicy:       RetryPolicy
     }
 
     /// <summary>
-    /// Aggregated diagnostic counts for a single pipeline stage.
-    /// Events with no <c>Stage</c> are grouped under <c>Stage = None</c>.
+    /// A tree ring — aggregated diagnostic counts for a single pipeline stage.
+    /// Pulses with no <c>Stage</c> are grouped under <c>Stage = None</c>.
     /// </summary>
-    type StageSummary = {
+    type Ring = {
         /// <summary>The stage name, or <c>None</c> for pipeline-level events.</summary>
         Stage:        string option
-        /// <summary>Number of <c>Info</c>-level events in this stage.</summary>
+        /// <summary>Number of <c>Info</c>-level pulses in this stage.</summary>
         InfoCount:    int64
-        /// <summary>Number of <c>Warning</c>-level events in this stage.</summary>
+        /// <summary>Number of <c>Warning</c>-level pulses in this stage.</summary>
         WarningCount: int64
-        /// <summary>Number of <c>Error</c>-level events in this stage.</summary>
+        /// <summary>Number of <c>Error</c>-level pulses in this stage.</summary>
         ErrorCount:   int64
-        /// <summary>Number of <c>Fatal</c>-level events in this stage.</summary>
+        /// <summary>Number of <c>Fatal</c>-level pulses in this stage.</summary>
         FatalCount:   int64
-        /// <summary>Total number of events in this stage.</summary>
+        /// <summary>Total number of pulses in this stage.</summary>
         TotalCount:   int64
     }
 
     /// <summary>
-    /// The structured outcome of a completed pipeline run.
+    /// The harvest — structured outcome of a completed pipeline run.
     /// </summary>
-    type PipelineResult = {
+    type Harvest = {
         /// <summary>
-        /// Number of records read from the source.
+        /// Number of records read from the root.
         /// </summary>
         RecordsRead:     int64
         /// <summary>
@@ -208,9 +208,9 @@ module Domain =
         /// </summary>
         Duration:        TimeSpan
         /// <summary>
-        /// List of diagnostic events emitted during the run.
+        /// List of pulses emitted during the run.
         /// </summary>
-        Events:          DiagnosticEvent list
+        Events:          Pulse list
     }
 
 module ExecutionContext =
@@ -219,12 +219,12 @@ module ExecutionContext =
 
     /// <summary>
     /// Creates a new <c>ExecutionContext</c> for a single pipeline run.
-    /// All events emitted via <c>Emit</c> are readable via <c>ReadEvents</c>.
+    /// All pulses emitted via <c>Emit</c> are readable via <c>ReadEvents</c>.
     /// <c>Emit</c> is thread-safe: concurrent calls are serialized via a lock,
     /// and the emission order is preserved.
     /// </summary>
     let create (token: System.Threading.CancellationToken) (batchSize: int) : ExecutionContext =
-        let events = ResizeArray<DiagnosticEvent>()
+        let events = ResizeArray<Pulse>()
         let gate   = obj ()
         { CancellationToken = token
           BatchSize         = batchSize
@@ -239,7 +239,7 @@ module ExecutionContext =
     let ``default`` () =
         create System.Threading.CancellationToken.None 1_000
 
-module PipelineResult =
+module Harvest =
 
     open Domain
 
@@ -253,10 +253,10 @@ module PipelineResult =
     }
 
     /// <summary>
-    /// Builds a PipelineResult by folding over a list of diagnostic events.
+    /// Builds a Harvest by folding over a list of pulses.
     /// The value of RecordsAccepted is defined as: read - rejected - failed.
     /// </summary>
-    let fromEvents (recordsRead: int64) (duration: TimeSpan) (events: DiagnosticEvent list) =
+    let fromEvents (recordsRead: int64) (duration: TimeSpan) (events: Pulse list) =
         let rejected = events |> List.filter (fun e -> e.Severity = Error) |> List.length |> int64
         let failed   = events |> List.filter (fun e -> e.Severity = Fatal) |> List.length |> int64
         { RecordsRead     = recordsRead
@@ -267,12 +267,12 @@ module PipelineResult =
           Events          = events }
 
     /// <summary>
-    /// Aggregates a list of diagnostic events into per-stage summaries.
-    /// Events are grouped by <c>Stage</c> (with <c>None</c> as a valid group
-    /// for pipeline-level events). The order of summaries follows the first
-    /// occurrence of each stage in the event list.
+    /// Aggregates a list of pulses into per-stage rings.
+    /// Pulses are grouped by <c>Stage</c> (with <c>None</c> as a valid group
+    /// for pipeline-level pulses). The order of rings follows the first
+    /// occurrence of each stage in the pulse list.
     /// </summary>
-    let summarizeByStage (events: DiagnosticEvent list) : StageSummary list =
+    let summarizeByStage (events: Pulse list) : Ring list =
         let order = ResizeArray<string option>()
         let acc   = Dictionary<string, int64 * int64 * int64 * int64>()
         let sentinel = "\x00__none__"
@@ -301,45 +301,45 @@ module PipelineResult =
               FatalCount   = f
               TotalCount   = i + w + er + f } ]
 
-module Flow =
+module Vessel =
 
     open Domain
     open FSharp.Control
 
     /// <summary>
-    /// Creates a <c>Flow</c> that applies a mapping function to every item.
+    /// Creates a <c>Vessel</c> that applies a mapping function to every item.
     /// </summary>
-    let map (f: 'TIn -> 'TOut) : Flow<'TIn, 'TOut> = {
+    let map (f: 'TIn -> 'TOut) : Vessel<'TIn, 'TOut> = {
         Transform = TaskSeq.map f
     }
 
     /// <summary>
-    /// Creates a <c>Flow</c> that keeps only items matching the predicate.
+    /// Creates a <c>Vessel</c> that keeps only items matching the predicate.
     /// </summary>
-    let filter (predicate: 'T -> bool) : Flow<'T, 'T> = {
+    let filter (predicate: 'T -> bool) : Vessel<'T, 'T> = {
         Transform = TaskSeq.filter predicate
     }
 
     /// <summary>
-    /// Composes two flows left-to-right: output of <c>f1</c> becomes input of <c>f2</c>.
+    /// Composes two vessels left-to-right: output of <c>v1</c> becomes input of <c>v2</c>.
     /// </summary>
-    let compose (f1: Flow<'T1, 'T2>) (f2: Flow<'T2, 'T3>) : Flow<'T1, 'T3> = {
-        Transform = f1.Transform >> f2.Transform
+    let compose (v1: Vessel<'T1, 'T2>) (v2: Vessel<'T2, 'T3>) : Vessel<'T1, 'T3> = {
+        Transform = v1.Transform >> v2.Transform
     }
 
     /// <summary>
     /// Operator alias for <c>compose</c> — mirrors F# function composition style.
     /// </summary>
-    let (>>>) f1 f2 = compose f1 f2
+    let (>>>) v1 v2 = compose v1 v2
 
     /// <summary>
-    /// Creates a <c>Flow</c> that validates every item using <c>validator</c>.
+    /// Creates a <c>Vessel</c> that validates every item using <c>validator</c>.
     /// Items for which <c>validator</c> returns <c>Ok</c> are passed downstream unchanged.
-    /// Items for which it returns <c>Error</c> are dropped, and a <c>DiagnosticEvent</c>
+    /// Items for which it returns <c>Error</c> are dropped, and a <c>Pulse</c>
     /// of severity <c>Error</c> is emitted via <c>ctx</c>, recording the stage name,
     /// 0-based stream index, and the <c>ErrorKind</c> returned by the validator.
     /// </summary>
-    let validate (stageName: string) (ctx: ExecutionContext) (validator: 'T -> Result<'T, ErrorKind>) : Flow<'T, 'T> =
+    let validate (stageName: string) (ctx: ExecutionContext) (validator: 'T -> Result<'T, ErrorKind>) : Vessel<'T, 'T> =
         { Transform = fun stream ->
             // Mutable `index` works because `taskSeq` iterates sequentially.
             let mutable index = 0L
@@ -363,17 +363,17 @@ module Flow =
             } }
 
     /// <summary>
-    /// Creates a <c>Flow</c> that enriches every item using <c>enricher</c>.
+    /// Creates a <c>Vessel</c> that enriches every item using <c>enricher</c>.
     /// Items for which <c>enricher</c> returns <c>Ok</c> are passed downstream
     /// as the (potentially type-changed) enriched value.
     /// Items for which it returns <c>Error</c> are dropped, and a
-    /// <c>DiagnosticEvent</c> of severity <c>Error</c> is emitted via <c>ctx</c>,
+    /// <c>Pulse</c> of severity <c>Error</c> is emitted via <c>ctx</c>,
     /// recording the stage name, 0-based stream index, and the <c>ErrorKind</c>
     /// returned by the enricher.
     /// Unlike <c>validate</c>, the enricher may change the record type from
     /// <c>'T</c> to <c>'TOut</c> — useful for lookups, projections, and joins.
     /// </summary>
-    let enrich (stageName: string) (ctx: ExecutionContext) (enricher: 'T -> Result<'TOut, ErrorKind>) : Flow<'T, 'TOut> =
+    let enrich (stageName: string) (ctx: ExecutionContext) (enricher: 'T -> Result<'TOut, ErrorKind>) : Vessel<'T, 'TOut> =
         { Transform = fun stream ->
             let mutable index = 0L
             taskSeq {
@@ -396,13 +396,13 @@ module Flow =
             } }
 
     /// <summary>
-    /// Creates a <c>Flow</c> that groups consecutive items into arrays of at most
+    /// Creates a <c>Vessel</c> that groups consecutive items into arrays of at most
     /// <c>batchSize</c> items. The final batch is emitted even if it contains
     /// fewer than <c>batchSize</c> items.
     /// Throws <c>ArgumentException</c> if <c>batchSize</c> is less than 1.
     /// To use the pipeline's configured batch size, pass <c>ctx.BatchSize</c>.
     /// </summary>
-    let batch (batchSize: int) : Flow<'T, 'T[]> =
+    let batch (batchSize: int) : Vessel<'T, 'T[]> =
         if batchSize < 1 then
             raise (ArgumentException($"batchSize must be >= 1, was {batchSize}", nameof batchSize))
         { Transform = fun stream ->
@@ -423,35 +423,35 @@ module Pipeline =
     open FSharp.Control
 
     /// <summary>
-    /// Connects a <c>Source</c> directly to a <c>Sink</c>.
+    /// Connects a <c>Root</c> directly to a <c>Leaf</c>.
     /// </summary>
-    let run (source: Source<'T>) (sink: Sink<'T>) : Task<unit> =
-        sink.Write(source.Read())
+    let run (root: Root<'T>) (leaf: Leaf<'T>) : Task<unit> =
+        leaf.Write(root.Read())
 
     /// <summary>
-    /// Connects a <c>Source</c> to a <c>Sink</c>, transforming records through a <c>Flow</c>.
+    /// Connects a <c>Root</c> to a <c>Leaf</c>, transforming records through a <c>Vessel</c>.
     /// </summary>
-    let runWith (source: Source<'TIn>) (flow: Flow<'TIn, 'TOut>) (sink: Sink<'TOut>) : Task<unit> =
-        sink.Write(flow.Transform(source.Read()))
+    let runWith (root: Root<'TIn>) (vessel: Vessel<'TIn, 'TOut>) (leaf: Leaf<'TOut>) : Task<unit> =
+        leaf.Write(vessel.Transform(root.Read()))
 
     /// <summary>
     /// Runs a pipeline under an <c>ExecutionContext</c> and returns a structured
-    /// <c>PipelineResult</c>. Counts every record emitted by the source, measures
-    /// wall-clock duration, and collects all diagnostic events from <c>ctx</c>.
+    /// <c>Harvest</c>. Counts every record emitted by the root, measures
+    /// wall-clock duration, and collects all pulses from <c>ctx</c>.
     /// Any unhandled exception (e.g., a connector I/O failure) is caught, emitted
-    /// as a <c>Fatal</c> diagnostic event, and the function returns a well-formed
-    /// <c>PipelineResult</c> reflecting the partial run rather than faulting the task.
+    /// as a <c>Fatal</c> pulse, and the function returns a well-formed
+    /// <c>Harvest</c> reflecting the partial run rather than faulting the task.
     /// When <c>ctx.RetryPolicy</c> is not <c>NoRetry</c>, the entire pipeline is
     /// re-executed from scratch on failure, up to the configured number of attempts.
-    /// Each retry emits a <c>Warning</c>-level diagnostic event. If all retries are
-    /// exhausted, a <c>Fatal</c> event is emitted and the partial result is returned.
+    /// Each retry emits a <c>Warning</c>-level pulse. If all retries are
+    /// exhausted, a <c>Fatal</c> pulse is emitted and the partial result is returned.
     /// </summary>
     let runWithContext
             (ctx:    ExecutionContext)
-            (source: Source<'TIn>)
-            (flow:   Flow<'TIn, 'TOut>)
-            (sink:   Sink<'TOut>)
-            : Task<PipelineResult> =
+            (root:   Root<'TIn>)
+            (vessel: Vessel<'TIn, 'TOut>)
+            (leaf:   Leaf<'TOut>)
+            : Task<Harvest> =
         task {
             ctx.CancellationToken.ThrowIfCancellationRequested()
             let sw    = System.Diagnostics.Stopwatch.StartNew()
@@ -468,16 +468,16 @@ module Pipeline =
             while not succeeded && attempt <= maxAttempts do
                 count.Value <- 0L
 
-                let countingSource : Source<'TIn> = {
+                let countingRoot : Root<'TIn> = {
                     Read = fun () ->
-                        source.Read()
+                        root.Read()
                         |> TaskSeq.map (fun item ->
                             count.Value <- count.Value + 1L
                             item)
                 }
 
                 try
-                    do! runWith countingSource flow sink
+                    do! runWith countingRoot vessel leaf
                     succeeded <- true
                 with ex ->
                     if attempt < maxAttempts then
@@ -503,5 +503,5 @@ module Pipeline =
                     attempt <- attempt + 1
 
             sw.Stop()
-            return PipelineResult.fromEvents count.Value sw.Elapsed (ctx.ReadEvents())
+            return Harvest.fromEvents count.Value sw.Elapsed (ctx.ReadEvents())
         }

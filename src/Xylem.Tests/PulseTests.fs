@@ -1,4 +1,4 @@
-module DiagnosticsTests
+module PulseTests
 
 open System
 open Xunit
@@ -6,7 +6,7 @@ open Xylem
 open Xylem.Domain
 
 [<Fact>]
-let ``DiagnosticEvent can be constructed for each Severity`` () =
+let ``Pulse can be constructed for each Severity`` () =
     let severities = [ Info; Warning; Error; Fatal ]
     let events     = severities |> List.map (fun s -> Helpers.makeEvent s (Custom("test", Map.empty)))
     Assert.Equal(4, events.Length)
@@ -50,7 +50,7 @@ let ``Custom ErrorKind round-trips tag and data`` () =
     | _ -> Assert.Fail("expected Custom")
 
 [<Fact>]
-let ``DiagnosticEvent Stage and RecordIndex are optional`` () =
+let ``Pulse Stage and RecordIndex are optional`` () =
     let withBoth =
         { Helpers.makeEvent Warning (ValidationError("f", "r")) with
             Stage       = Some "my-flow"
@@ -63,8 +63,8 @@ let ``DiagnosticEvent Stage and RecordIndex are optional`` () =
     Assert.Equal(None, withNeither.RecordIndex)
 
 [<Fact>]
-let ``PipelineResult empty has zero counts and no events`` () =
-    let r = PipelineResult.empty
+let ``Harvest empty has zero counts and no events`` () =
+    let r = Harvest.empty
     Assert.Equal(0L, r.RecordsRead)
     Assert.Equal(0L, r.RecordsAccepted)
     Assert.Equal(0L, r.RecordsRejected)
@@ -72,14 +72,14 @@ let ``PipelineResult empty has zero counts and no events`` () =
     Assert.Empty(r.Events)
 
 [<Fact>]
-let ``PipelineResult fromEvents computes counts from event list`` () =
+let ``Harvest fromEvents computes counts from event list`` () =
     let events = [
         Helpers.makeEvent Error  (ValidationError("Age", "negative"))           // rejected
         Helpers.makeEvent Error  (ValidationError("Name", "empty"))             // rejected
         Helpers.makeEvent Fatal  (SystemError(Exception("disk")))        // failed
         Helpers.makeEvent Warning (Custom("coerced", Map.empty))                // warning — not a rejection
     ]
-    let result = PipelineResult.fromEvents 10L (TimeSpan.FromSeconds 1.0) events
+    let result = Harvest.fromEvents 10L (TimeSpan.FromSeconds 1.0) events
     Assert.Equal(10L, result.RecordsRead)
     Assert.Equal(2L,  result.RecordsRejected)
     Assert.Equal(1L,  result.RecordsFailed)

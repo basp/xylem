@@ -15,11 +15,11 @@ open Xylem.Domain
 [<Fact>]
 let ``NoRetry succeeds normally`` () = task {
     let ctx    = ExecutionContext.``default`` ()
-    let source : Source<int> = { Read = fun () -> taskSeq { yield 1; yield 2; yield 3 } }
-    let flow   = Flow.map id
-    let sink, read = Helpers.collectSink<int> ()
+    let root : Root<int> = { Read = fun () -> taskSeq { yield 1; yield 2; yield 3 } }
+    let vessel   = Vessel.map id
+    let leaf, read = Helpers.collectSink<int> ()
 
-    let! result = Pipeline.runWithContext ctx source flow sink
+    let! result = Pipeline.runWithContext ctx root vessel leaf
 
     Assert.Equal(3L, result.RecordsRead)
     Assert.Equal(3L, result.RecordsAccepted)
@@ -29,11 +29,11 @@ let ``NoRetry succeeds normally`` () = task {
 [<Fact>]
 let ``NoRetry emits Fatal on failure`` () = task {
     let ctx    = ExecutionContext.``default`` ()
-    let source : Source<int> = { Read = fun () -> taskSeq { yield 1 } }
-    let flow   = Flow.map id
-    let sink   : Sink<int> = { Write = fun _ -> failwith "boom" }
+    let root : Root<int> = { Read = fun () -> taskSeq { yield 1 } }
+    let vessel   = Vessel.map id
+    let leaf   : Leaf<int> = { Write = fun _ -> failwith "boom" }
 
-    let! result = Pipeline.runWithContext ctx source flow sink
+    let! result = Pipeline.runWithContext ctx root vessel leaf
 
     Assert.Equal(1L, result.RecordsFailed)
     let fatal = result.Events |> List.find (fun e -> e.Severity = Fatal)
@@ -52,9 +52,9 @@ let ``NoRetry emits Fatal on failure`` () = task {
 let ``FixedDelay succeeds on second attempt`` () = task {
     let mutable calls = 0
     let ctx = { ExecutionContext.``default`` () with RetryPolicy = FixedDelay(2, TimeSpan.Zero) }
-    let source : Source<int> = { Read = fun () -> taskSeq { yield 42 } }
-    let flow   = Flow.map id
-    let sink   : Sink<int> = {
+    let root : Root<int> = { Read = fun () -> taskSeq { yield 42 } }
+    let vessel   = Vessel.map id
+    let leaf   : Leaf<int> = {
         Write = fun items -> task {
             calls <- calls + 1
             if calls = 1 then failwith "transient"
@@ -62,7 +62,7 @@ let ``FixedDelay succeeds on second attempt`` () = task {
         }
     }
 
-    let! result = Pipeline.runWithContext ctx source flow sink
+    let! result = Pipeline.runWithContext ctx root vessel leaf
 
     Assert.Equal(2, calls)
     Assert.Equal(0L, result.RecordsFailed)
@@ -77,16 +77,16 @@ let ``FixedDelay succeeds on second attempt`` () = task {
 let ``FixedDelay exhausts all retries and emits Fatal`` () = task {
     let mutable calls = 0
     let ctx = { ExecutionContext.``default`` () with RetryPolicy = FixedDelay(2, TimeSpan.Zero) }
-    let source : Source<int> = { Read = fun () -> taskSeq { yield 1 } }
-    let flow   = Flow.map id
-    let sink   : Sink<int> = {
+    let root : Root<int> = { Read = fun () -> taskSeq { yield 1 } }
+    let vessel   = Vessel.map id
+    let leaf   : Leaf<int> = {
         Write = fun _ -> task {
             calls <- calls + 1
             failwith $"fail-{calls}"
         }
     }
 
-    let! result = Pipeline.runWithContext ctx source flow sink
+    let! result = Pipeline.runWithContext ctx root vessel leaf
 
     Assert.Equal(3, calls) // 1 initial + 2 retries
     Assert.Equal(1L, result.RecordsFailed)
@@ -101,9 +101,9 @@ let ``FixedDelay respects cancellation between retries`` () = task {
     use cts = new CancellationTokenSource()
     let ctx = { ExecutionContext.create cts.Token 1000 with RetryPolicy = FixedDelay(5, TimeSpan.FromSeconds 10.0) }
     let mutable calls = 0
-    let source : Source<int> = { Read = fun () -> taskSeq { yield 1 } }
-    let flow   = Flow.map id
-    let sink   : Sink<int> = {
+    let root : Root<int> = { Read = fun () -> taskSeq { yield 1 } }
+    let vessel   = Vessel.map id
+    let leaf   : Leaf<int> = {
         Write = fun _ -> task {
             calls <- calls + 1
             // Cancel after the first failure, so the delay is canceled.
@@ -114,7 +114,7 @@ let ``FixedDelay respects cancellation between retries`` () = task {
 
     let mutable threw = false
     try
-        let! _ = Pipeline.runWithContext ctx source flow sink
+        let! _ = Pipeline.runWithContext ctx root vessel leaf
         ()
     with
     | :? OperationCanceledException
@@ -128,16 +128,16 @@ let ``FixedDelay respects cancellation between retries`` () = task {
 let ``FixedDelay with zero maxAttempts behaves like NoRetry`` () = task {
     let mutable calls = 0
     let ctx = { ExecutionContext.``default`` () with RetryPolicy = FixedDelay(0, TimeSpan.Zero) }
-    let source : Source<int> = { Read = fun () -> taskSeq { yield 1 } }
-    let flow   = Flow.map id
-    let sink   : Sink<int> = {
+    let root : Root<int> = { Read = fun () -> taskSeq { yield 1 } }
+    let vessel   = Vessel.map id
+    let leaf   : Leaf<int> = {
         Write = fun _ -> task {
             calls <- calls + 1
             failwith "boom"
         }
     }
 
-    let! result = Pipeline.runWithContext ctx source flow sink
+    let! result = Pipeline.runWithContext ctx root vessel leaf
 
     Assert.Equal(1, calls)
     Assert.Equal(1L, result.RecordsFailed)

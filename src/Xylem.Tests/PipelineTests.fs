@@ -12,23 +12,23 @@ open Xylem.Domain
 // ---------------------------------------------------------------------------
 
 [<Fact>]
-let ``Pipeline run passes source items to sink`` () = task {
-    let source : Source<int> = {
+let ``Pipeline run passes root items to leaf`` () = task {
+    let root : Root<int> = {
         Read = fun () -> taskSeq { yield 10; yield 20; yield 30 }
     }
-    let sink, read = Helpers.collectSink<int>()
+    let leaf, read = Helpers.collectSink<int>()
 
-    do! Pipeline.run source sink
+    do! Pipeline.run root leaf
 
     Assert.Equal<int list>([10; 20; 30], read ())
 }
 
 [<Fact>]
-let ``Pipeline run with empty source results in empty sink`` () = task {
-    let source : Source<int> = { Read = fun () -> TaskSeq.empty }
-    let sink, read = Helpers.collectSink<int>()
+let ``Pipeline run with empty root results in empty leaf`` () = task {
+    let root : Root<int> = { Read = fun () -> TaskSeq.empty }
+    let leaf, read = Helpers.collectSink<int>()
 
-    do! Pipeline.run source sink
+    do! Pipeline.run root leaf
 
     Assert.Empty(read ())
 }
@@ -40,11 +40,11 @@ let ``Pipeline run with empty source results in empty sink`` () = task {
 [<Fact>]
 let ``Pipeline runWithContext returns correct RecordsRead when all pass`` () = task {
     let ctx    = ExecutionContext.``default`` ()
-    let source : Source<int> = { Read = fun () -> taskSeq { yield 1; yield 2; yield 3 } }
-    let flow   = Flow.map id
-    let sink, _ = Helpers.collectSink<int>()
+    let root : Root<int> = { Read = fun () -> taskSeq { yield 1; yield 2; yield 3 } }
+    let vessel = Vessel.map id
+    let leaf, _ = Helpers.collectSink<int>()
 
-    let! result = Pipeline.runWithContext ctx source flow sink
+    let! result = Pipeline.runWithContext ctx root vessel leaf
 
     Assert.Equal(3L, result.RecordsRead)
     Assert.Equal(3L, result.RecordsAccepted)
@@ -55,11 +55,11 @@ let ``Pipeline runWithContext returns correct RecordsRead when all pass`` () = t
 [<Fact>]
 let ``Pipeline runWithContext captures validation rejections in PipelineResult`` () = task {
     let ctx    = ExecutionContext.``default`` ()
-    let source : Source<int> = { Read = fun () -> taskSeq { yield -1; yield 2; yield -3; yield 4 } }
-    let flow   = Flow.validate "stage" ctx Helpers.positiveValidator
-    let sink, read = Helpers.collectSink<int>()
+    let root : Root<int> = { Read = fun () -> taskSeq { yield -1; yield 2; yield -3; yield 4 } }
+    let vessel = Vessel.validate "stage" ctx Helpers.positiveValidator
+    let leaf, read = Helpers.collectSink<int>()
 
-    let! result = Pipeline.runWithContext ctx source flow sink
+    let! result = Pipeline.runWithContext ctx root vessel leaf
 
     Assert.Equal(4L, result.RecordsRead)
     Assert.Equal(2L, result.RecordsRejected)
@@ -71,11 +71,11 @@ let ``Pipeline runWithContext captures validation rejections in PipelineResult``
 [<Fact>]
 let ``Pipeline runWithContext records a non-negative Duration`` () = task {
     let ctx    = ExecutionContext.``default`` ()
-    let source : Source<int> = { Read = fun () -> TaskSeq.empty }
-    let flow   = Flow.map id
-    let sink, _ = Helpers.collectSink<int>()
+    let root : Root<int> = { Read = fun () -> TaskSeq.empty }
+    let vessel = Vessel.map id
+    let leaf, _ = Helpers.collectSink<int>()
 
-    let! result = Pipeline.runWithContext ctx source flow sink
+    let! result = Pipeline.runWithContext ctx root vessel leaf
 
     Assert.True(result.Duration >= TimeSpan.Zero)
 }
@@ -83,11 +83,11 @@ let ``Pipeline runWithContext records a non-negative Duration`` () = task {
 [<Fact>]
 let ``Pipeline runWithContext with empty source returns zero counts`` () = task {
     let ctx    = ExecutionContext.``default`` ()
-    let source : Source<int> = { Read = fun () -> TaskSeq.empty }
-    let flow   = Flow.map id
-    let sink, _ = Helpers.collectSink<int>()
+    let root : Root<int> = { Read = fun () -> TaskSeq.empty }
+    let vessel = Vessel.map id
+    let leaf, _ = Helpers.collectSink<int>()
 
-    let! result = Pipeline.runWithContext ctx source flow sink
+    let! result = Pipeline.runWithContext ctx root vessel leaf
 
     Assert.Equal(0L, result.RecordsRead)
     Assert.Equal(0L, result.RecordsAccepted)
@@ -98,16 +98,16 @@ let ``Pipeline runWithContext with empty source returns zero counts`` () = task 
 // ---------------------------------------------------------------------------
 
 [<Fact>]
-let ``Flow validate throws OperationCanceledException for already-cancelled token`` () = task {
+let ``Vessel validate throws OperationCanceledException for already-cancelled token`` () = task {
     use cts  = new CancellationTokenSource()
     cts.Cancel()
     let ctx   = ExecutionContext.create cts.Token 1000
-    let flow  = Flow.validate "stage" ctx Helpers.positiveValidator
+    let vessel = Vessel.validate "stage" ctx Helpers.positiveValidator
     let input = taskSeq { yield 1; yield 2; yield 3 }
 
     let mutable threw = false
     try
-        let! _ = flow.Transform(input) |> TaskSeq.toListAsync
+        let! _ = vessel.Transform(input) |> TaskSeq.toListAsync
         ()
     with :? OperationCanceledException ->
         threw <- true
@@ -120,13 +120,13 @@ let ``Pipeline runWithContext throws OperationCanceledException for already-canc
     use cts  = new CancellationTokenSource()
     cts.Cancel()
     let ctx    = ExecutionContext.create cts.Token 1000
-    let source : Source<int> = { Read = fun () -> taskSeq { yield 1; yield 2; yield 3 } }
-    let flow   = Flow.map id
-    let sink, _ = Helpers.collectSink<int>()
+    let root : Root<int> = { Read = fun () -> taskSeq { yield 1; yield 2; yield 3 } }
+    let vessel = Vessel.map id
+    let leaf, _ = Helpers.collectSink<int>()
 
     let mutable threw = false
     try
-        let! _ = Pipeline.runWithContext ctx source flow sink
+        let! _ = Pipeline.runWithContext ctx root vessel leaf
         ()
     with :? OperationCanceledException ->
         threw <- true

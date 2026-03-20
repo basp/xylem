@@ -1,4 +1,4 @@
-module FlowTests
+module VesselTests
 
 open System
 open System.Threading
@@ -6,14 +6,14 @@ open FSharp.Control
 open Xunit
 open Xylem
 open Xylem.Domain
-open Xylem.Flow
+open Xylem.Vessel
 
 // ---------------------------------------------------------------------------
 // Flow — map / filter / compose
 // ---------------------------------------------------------------------------
 
 [<Fact>]
-let ``Flow map transforms every item`` () = task {
+let ``Vessel map transforms every item`` () = task {
     let flow  = map (fun x -> x * 2)
     let input = taskSeq { yield 1; yield 2; yield 3 }
 
@@ -23,7 +23,7 @@ let ``Flow map transforms every item`` () = task {
 }
 
 [<Fact>]
-let ``Flow filter keeps only matching items`` () = task {
+let ``Vessel filter keeps only matching items`` () = task {
     let flow  = filter (fun x -> x % 2 = 0)
     let input = taskSeq { yield 1; yield 2; yield 3; yield 4 }
 
@@ -33,7 +33,7 @@ let ``Flow filter keeps only matching items`` () = task {
 }
 
 [<Fact>]
-let ``Flow map on empty stream yields empty stream`` () = task {
+let ``Vessel map on empty stream yields empty stream`` () = task {
     let flow = map (fun x -> x * 2)
 
     let! result = flow.Transform(TaskSeq.empty) |> TaskSeq.toListAsync
@@ -42,20 +42,20 @@ let ``Flow map on empty stream yields empty stream`` () = task {
 }
 
 [<Fact>]
-let ``Pipeline runWith threads source through flow into sink`` () = task {
-    let source : Source<int> = {
+let ``Pipeline runWith threads root through vessel into leaf`` () = task {
+    let root : Root<int> = {
         Read = fun () -> taskSeq { yield 1; yield 2; yield 3; yield 4; yield 5 }
     }
-    let flow       = filter (fun x -> x % 2 <> 0)
-    let sink, read = Helpers.collectSink<int>()
+    let vessel     = filter (fun x -> x % 2 <> 0)
+    let leaf, read = Helpers.collectSink<int>()
 
-    do! Pipeline.runWith source flow sink
+    do! Pipeline.runWith root vessel leaf
 
     Assert.Equal<int list>([1; 3; 5], read ())
 }
 
 [<Fact>]
-let ``Flow map then filter via compose`` () = task {
+let ``Vessel map then filter via compose`` () = task {
     let flow  = map (fun x -> x * 2) >>> filter (fun x -> x > 4)
     let input = taskSeq { yield 1; yield 2; yield 3 }
 
@@ -65,11 +65,11 @@ let ``Flow map then filter via compose`` () = task {
 }
 
 // ---------------------------------------------------------------------------
-// Flow.validate
+// Vessel.validate
 // ---------------------------------------------------------------------------
 
 [<Fact>]
-let ``Flow validate passes all valid items through unchanged`` () = task {
+let ``Vessel validate passes all valid items through unchanged`` () = task {
     let ctx   = ExecutionContext.``default`` ()
     let flow  = validate "stage" ctx Helpers.positiveValidator
     let input = taskSeq { yield 1; yield 2; yield 3 }
@@ -80,7 +80,7 @@ let ``Flow validate passes all valid items through unchanged`` () = task {
 }
 
 [<Fact>]
-let ``Flow validate filters out invalid items`` () = task {
+let ``Vessel validate filters out invalid items`` () = task {
     let ctx   = ExecutionContext.``default`` ()
     let flow  = validate "stage" ctx Helpers.positiveValidator
     let input = taskSeq { yield -1; yield 2; yield -3; yield 4 }
@@ -91,7 +91,7 @@ let ``Flow validate filters out invalid items`` () = task {
 }
 
 [<Fact>]
-let ``Flow validate emits one Error event per rejected item`` () = task {
+let ``Vessel validate emits one Error event per rejected item`` () = task {
     let ctx   = ExecutionContext.``default`` ()
     let flow  = validate "validate-age" ctx Helpers.positiveValidator
     let input = taskSeq { yield -1; yield 2; yield -3 }
@@ -105,7 +105,7 @@ let ``Flow validate emits one Error event per rejected item`` () = task {
 }
 
 [<Fact>]
-let ``Flow validate emits correct RecordIndex for each rejected item`` () = task {
+let ``Vessel validate emits correct RecordIndex for each rejected item`` () = task {
     let ctx   = ExecutionContext.``default`` ()
     let flow  = validate "stage" ctx Helpers.positiveValidator
     // indices: 0 1 2
@@ -120,7 +120,7 @@ let ``Flow validate emits correct RecordIndex for each rejected item`` () = task
 }
 
 [<Fact>]
-let ``Flow validate on empty stream emits no events`` () = task {
+let ``Vessel validate on empty stream emits no events`` () = task {
     let ctx  = ExecutionContext.``default`` ()
     let flow = validate "stage" ctx Helpers.positiveValidator
 
@@ -130,7 +130,7 @@ let ``Flow validate on empty stream emits no events`` () = task {
 }
 
 [<Fact>]
-let ``Flow validate with all-invalid stream yields empty output`` () = task {
+let ``Vessel validate with all-invalid stream yields empty output`` () = task {
     let ctx   = ExecutionContext.``default`` ()
     let flow  = validate "stage" ctx Helpers.positiveValidator
     let input = taskSeq { yield -1; yield -2; yield -3 }
@@ -142,7 +142,7 @@ let ``Flow validate with all-invalid stream yields empty output`` () = task {
 }
 
 [<Fact>]
-let ``Flow validate throws OperationCanceledException for already-cancelled token`` () = task {
+let ``Vessel validate throws OperationCanceledException for already-cancelled token`` () = task {
     use cts  = new CancellationTokenSource()
     cts.Cancel()
     let ctx   = ExecutionContext.create cts.Token 1000
@@ -160,7 +160,7 @@ let ``Flow validate throws OperationCanceledException for already-cancelled toke
 }
 
 // ---------------------------------------------------------------------------
-// Flow.enrich
+// Vessel.enrich
 // ---------------------------------------------------------------------------
 
 let private addLabelEnricher (x: int) : Result<string, ErrorKind> =
@@ -168,7 +168,7 @@ let private addLabelEnricher (x: int) : Result<string, ErrorKind> =
     else Result.Error (ValidationError("value", "must be positive to label"))
 
 [<Fact>]
-let ``Flow enrich passes all successfully enriched items through`` () = task {
+let ``Vessel enrich passes all successfully enriched items through`` () = task {
     let ctx   = ExecutionContext.``default`` ()
     let flow  = enrich "stage" ctx addLabelEnricher
     let input = taskSeq { yield 1; yield 2; yield 3 }
@@ -179,7 +179,7 @@ let ``Flow enrich passes all successfully enriched items through`` () = task {
 }
 
 [<Fact>]
-let ``Flow enrich can change the item type`` () = task {
+let ``Vessel enrich can change the item type`` () = task {
     let ctx      = ExecutionContext.``default`` ()
     let toLength = fun (s: string) -> Ok s.Length
     let flow     = enrich "stage" ctx toLength
@@ -191,7 +191,7 @@ let ``Flow enrich can change the item type`` () = task {
 }
 
 [<Fact>]
-let ``Flow enrich drops items where enrichment fails`` () = task {
+let ``Vessel enrich drops items where enrichment fails`` () = task {
     let ctx   = ExecutionContext.``default`` ()
     let flow  = enrich "stage" ctx addLabelEnricher
     let input = taskSeq { yield -1; yield 2; yield -3; yield 4 }
@@ -202,7 +202,7 @@ let ``Flow enrich drops items where enrichment fails`` () = task {
 }
 
 [<Fact>]
-let ``Flow enrich emits one Error event per failed enrichment`` () = task {
+let ``Vessel enrich emits one Error event per failed enrichment`` () = task {
     let ctx   = ExecutionContext.``default`` ()
     let flow  = enrich "enrich-label" ctx addLabelEnricher
     let input = taskSeq { yield -1; yield 2; yield -3 }
@@ -216,7 +216,7 @@ let ``Flow enrich emits one Error event per failed enrichment`` () = task {
 }
 
 [<Fact>]
-let ``Flow enrich emits correct RecordIndex for each failed item`` () = task {
+let ``Vessel enrich emits correct RecordIndex for each failed item`` () = task {
     let ctx   = ExecutionContext.``default`` ()
     let flow  = enrich "stage" ctx addLabelEnricher
     // indices: 0 1 2
@@ -231,7 +231,7 @@ let ``Flow enrich emits correct RecordIndex for each failed item`` () = task {
 }
 
 [<Fact>]
-let ``Flow enrich on empty stream emits no events`` () = task {
+let ``Vessel enrich on empty stream emits no events`` () = task {
     let ctx  = ExecutionContext.``default`` ()
     let flow = enrich "stage" ctx addLabelEnricher
 
@@ -241,7 +241,7 @@ let ``Flow enrich on empty stream emits no events`` () = task {
 }
 
 [<Fact>]
-let ``Flow enrich with all-failing stream yields empty output`` () = task {
+let ``Vessel enrich with all-failing stream yields empty output`` () = task {
     let ctx   = ExecutionContext.``default`` ()
     let flow  = enrich "stage" ctx addLabelEnricher
     let input = taskSeq { yield -1; yield -2; yield -3 }
@@ -253,7 +253,7 @@ let ``Flow enrich with all-failing stream yields empty output`` () = task {
 }
 
 [<Fact>]
-let ``Flow enrich throws OperationCanceledException for already-cancelled token`` () = task {
+let ``Vessel enrich throws OperationCanceledException for already-cancelled token`` () = task {
     use cts  = new CancellationTokenSource()
     cts.Cancel()
     let ctx   = ExecutionContext.create cts.Token 1000
@@ -271,11 +271,11 @@ let ``Flow enrich throws OperationCanceledException for already-cancelled token`
 }
 
 // ---------------------------------------------------------------------------
-// Flow.batch
+// Vessel.batch
 // ---------------------------------------------------------------------------
 
 [<Fact>]
-let ``Flow batch groups items into full batches`` () = task {
+let ``Vessel batch groups items into full batches`` () = task {
     let flow  = batch 3
     let input = taskSeq { yield 1; yield 2; yield 3; yield 4; yield 5; yield 6 }
 
@@ -287,7 +287,7 @@ let ``Flow batch groups items into full batches`` () = task {
 }
 
 [<Fact>]
-let ``Flow batch emits a partial final batch when items do not divide evenly`` () = task {
+let ``Vessel batch emits a partial final batch when items do not divide evenly`` () = task {
     let flow  = batch 3
     let input = taskSeq { yield 1; yield 2; yield 3; yield 4; yield 5 }
 
@@ -299,7 +299,7 @@ let ``Flow batch emits a partial final batch when items do not divide evenly`` (
 }
 
 [<Fact>]
-let ``Flow batch yields a single batch when items fewer than batchSize`` () = task {
+let ``Vessel batch yields a single batch when items fewer than batchSize`` () = task {
     let flow  = batch 10
     let input = taskSeq { yield 1; yield 2; yield 3 }
 
@@ -310,7 +310,7 @@ let ``Flow batch yields a single batch when items fewer than batchSize`` () = ta
 }
 
 [<Fact>]
-let ``Flow batch on empty stream yields empty stream`` () = task {
+let ``Vessel batch on empty stream yields empty stream`` () = task {
     let flow = batch 3
 
     let! result = flow.Transform(TaskSeq.empty) |> TaskSeq.toListAsync
@@ -319,7 +319,7 @@ let ``Flow batch on empty stream yields empty stream`` () = task {
 }
 
 [<Fact>]
-let ``Flow batch with batchSize 1 yields one item per batch`` () = task {
+let ``Vessel batch with batchSize 1 yields one item per batch`` () = task {
     let flow  = batch 1
     let input = taskSeq { yield "a"; yield "b"; yield "c" }
 
@@ -332,7 +332,7 @@ let ``Flow batch with batchSize 1 yields one item per batch`` () = task {
 }
 
 [<Fact>]
-let ``Flow batch with exact multiple yields all full batches`` () = task {
+let ``Vessel batch with exact multiple yields all full batches`` () = task {
     let flow  = batch 2
     let input = taskSeq { yield 1; yield 2; yield 3; yield 4 }
 
@@ -343,17 +343,17 @@ let ``Flow batch with exact multiple yields all full batches`` () = task {
 }
 
 [<Fact>]
-let ``Flow batch throws ArgumentException for batchSize zero`` () =
+let ``Vessel batch throws ArgumentException for batchSize zero`` () =
     Assert.Throws<ArgumentException>(fun () -> batch 0 |> ignore)
     |> ignore
 
 [<Fact>]
-let ``Flow batch throws ArgumentException for negative batchSize`` () =
+let ``Vessel batch throws ArgumentException for negative batchSize`` () =
     Assert.Throws<ArgumentException>(fun () -> batch -1 |> ignore)
     |> ignore
 
 [<Fact>]
-let ``Flow batch can be composed with map`` () = task {
+let ``Vessel batch can be composed with map`` () = task {
     let flow  = map (fun x -> x * 10) >>> batch 2
     let input = taskSeq { yield 1; yield 2; yield 3; yield 4 }
 
@@ -365,7 +365,7 @@ let ``Flow batch can be composed with map`` () = task {
 }
 
 [<Fact>]
-let ``Flow batch respects ctx.BatchSize`` () = task {
+let ``Vessel batch respects ctx.BatchSize`` () = task {
     let ctx   = ExecutionContext.create CancellationToken.None 2
     let flow  = batch ctx.BatchSize
     let input = taskSeq { yield 1; yield 2; yield 3 }
