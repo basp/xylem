@@ -33,13 +33,13 @@ module FileSinkOptions =
 
 /// <summary>
 /// Line-oriented file connectors. Produces and consumes <c>string</c> lines.
-/// Parsing and serialisation belong in a <c>Flow</c>, not in the connector.
+/// Parsing and serialization belong in a <c>Flow</c>, not in the connector.
 /// </summary>
 module File =
 
     /// <summary>
     /// Creates a <c>Source&lt;string&gt;</c> from a <c>TextReader</c> factory.
-    /// Each call to <c>Read ()</c> invokes <c>readerFactory</c> to obtain a fresh
+    /// Each call to <c>Read ()</c> invokes <c>readerFactory</c> to get a fresh
     /// <c>TextReader</c>, yields its lines one at a time, and disposes the reader
     /// when enumeration ends. Use this overload in tests by supplying a
     /// <c>StringReader</c> factory.

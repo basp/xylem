@@ -31,4 +31,4 @@ let ``ReadEvents returns snapshot not affected by later Emit`` () =
     ctx.Emit(Helpers.makeEvent Warning (Custom("second", Map.empty)))
 
     Assert.Single(snapshot) |> ignore
-    Assert.Equal(2, (ctx.ReadEvents()).Length)
+    Assert.Equal(2, ctx.ReadEvents().Length)

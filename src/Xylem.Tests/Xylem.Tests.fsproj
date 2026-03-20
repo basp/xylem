@@ -15,6 +15,7 @@
     <Compile Include="InMemoryTests.fs" />
     <Compile Include="FileConnectorTests.fs" />
     <Compile Include="DiagnosticsTests.fs" />
+    <Compile Include="StageSummaryTests.fs" />
     <Compile Include="RetryTests.fs" />
     <Compile Include="EmitThreadSafetyTests.fs" />
   </ItemGroup>

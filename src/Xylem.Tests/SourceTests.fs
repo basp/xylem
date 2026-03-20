@@ -2,7 +2,6 @@ module SourceTests
 
 open FSharp.Control
 open Xunit
-open Xylem
 open Xylem.Domain
 
 [<Fact>]

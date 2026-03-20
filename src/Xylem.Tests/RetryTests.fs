@@ -92,8 +92,8 @@ let ``FixedDelay exhausts all retries and emits Fatal`` () = task {
     Assert.Equal(1L, result.RecordsFailed)
     let warnings = result.Events |> List.filter (fun e -> e.Severity = Warning)
     Assert.Equal(2, warnings.Length)
-    let fatals = result.Events |> List.filter (fun e -> e.Severity = Fatal)
-    Assert.Single(fatals) |> ignore
+    let fatal = result.Events |> List.filter (fun e -> e.Severity = Fatal)
+    Assert.Single(fatal) |> ignore
 }
 
 [<Fact>]
@@ -106,7 +106,7 @@ let ``FixedDelay respects cancellation between retries`` () = task {
     let sink   : Sink<int> = {
         Write = fun _ -> task {
             calls <- calls + 1
-            // Cancel after first failure so the delay is cancelled
+            // Cancel after the first failure, so the delay is canceled.
             cts.Cancel()
             failwith "fail"
         }

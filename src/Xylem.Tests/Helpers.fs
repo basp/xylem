@@ -1,7 +1,6 @@
 module Helpers
 
 open System
-open Xylem
 open Xylem.Connectors
 open Xylem.Domain
 

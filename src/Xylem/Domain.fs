@@ -165,6 +165,25 @@ module Domain =
     }
 
     /// <summary>
+    /// Aggregated diagnostic counts for a single pipeline stage.
+    /// Events with no <c>Stage</c> are grouped under <c>Stage = None</c>.
+    /// </summary>
+    type StageSummary = {
+        /// <summary>The stage name, or <c>None</c> for pipeline-level events.</summary>
+        Stage:        string option
+        /// <summary>Number of <c>Info</c>-level events in this stage.</summary>
+        InfoCount:    int64
+        /// <summary>Number of <c>Warning</c>-level events in this stage.</summary>
+        WarningCount: int64
+        /// <summary>Number of <c>Error</c>-level events in this stage.</summary>
+        ErrorCount:   int64
+        /// <summary>Number of <c>Fatal</c>-level events in this stage.</summary>
+        FatalCount:   int64
+        /// <summary>Total number of events in this stage.</summary>
+        TotalCount:   int64
+    }
+
+    /// <summary>
     /// The structured outcome of a completed pipeline run.
     /// </summary>
     type PipelineResult = {
@@ -201,8 +220,8 @@ module ExecutionContext =
     /// <summary>
     /// Creates a new <c>ExecutionContext</c> for a single pipeline run.
     /// All events emitted via <c>Emit</c> are readable via <c>ReadEvents</c>.
-    /// <c>Emit</c> is thread-safe: concurrent calls are serialised via a lock
-    /// and emission order is preserved.
+    /// <c>Emit</c> is thread-safe: concurrent calls are serialized via a lock,
+    /// and the emission order is preserved.
     /// </summary>
     let create (token: System.Threading.CancellationToken) (batchSize: int) : ExecutionContext =
         let events = ResizeArray<DiagnosticEvent>()
@@ -246,6 +265,41 @@ module PipelineResult =
           RecordsAccepted = recordsRead - rejected - failed
           Duration        = duration
           Events          = events }
+
+    /// <summary>
+    /// Aggregates a list of diagnostic events into per-stage summaries.
+    /// Events are grouped by <c>Stage</c> (with <c>None</c> as a valid group
+    /// for pipeline-level events). The order of summaries follows the first
+    /// occurrence of each stage in the event list.
+    /// </summary>
+    let summarizeByStage (events: DiagnosticEvent list) : StageSummary list =
+        let order = ResizeArray<string option>()
+        let acc   = Dictionary<string, int64 * int64 * int64 * int64>()
+        let sentinel = "\x00__none__"
+
+        let toKey (stage: string option) = stage |> Option.defaultValue sentinel
+
+        for e in events do
+            let key = toKey e.Stage
+            if not (acc.ContainsKey key) then
+                order.Add e.Stage
+                acc[key] <- (0L, 0L, 0L, 0L)
+            let i, w, er, f = acc[key]
+            acc[key] <-
+                match e.Severity with
+                | Info    -> (i + 1L, w, er, f)
+                | Warning -> (i, w + 1L, er, f)
+                | Error   -> (i, w, er + 1L, f)
+                | Fatal   -> (i, w, er, f + 1L)
+
+        [ for stage in order do
+            let i, w, er, f = acc[toKey stage]
+            { Stage        = stage
+              InfoCount    = i
+              WarningCount = w
+              ErrorCount   = er
+              FatalCount   = f
+              TotalCount   = i + w + er + f } ]
 
 module Flow =
 
@@ -384,7 +438,7 @@ module Pipeline =
     /// Runs a pipeline under an <c>ExecutionContext</c> and returns a structured
     /// <c>PipelineResult</c>. Counts every record emitted by the source, measures
     /// wall-clock duration, and collects all diagnostic events from <c>ctx</c>.
-    /// Any unhandled exception (e.g. a connector I/O failure) is caught, emitted
+    /// Any unhandled exception (e.g., a connector I/O failure) is caught, emitted
     /// as a <c>Fatal</c> diagnostic event, and the function returns a well-formed
     /// <c>PipelineResult</c> reflecting the partial run rather than faulting the task.
     /// When <c>ctx.RetryPolicy</c> is not <c>NoRetry</c>, the entire pipeline is
