@@ -46,8 +46,8 @@
 - [x] Chunked execution
 
 ### 7. In-memory connector
-- [ ] In-memory source
-- [ ] In-memory sink
+- [x] In-memory source
+- [x] In-memory sink
 
 ### 8. File connectors
 - [ ] File source

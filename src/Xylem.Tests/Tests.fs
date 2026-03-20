@@ -1,25 +1,18 @@
 ﻿module Tests
 
 open System
-open System.Collections.Generic
 open Xunit
 open FSharp.Control
 open Xylem
+open Xylem.Connectors
 open Xylem.Domain
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// In-memory sink that accumulates items into a List for assertion.
-let collectSink<'T> () =
-    let collected = List<'T>()
-    let sink : Sink<'T> = {
-        Write = fun stream -> task {
-            do! stream |> TaskSeq.iter collected.Add
-        }
-    }
-    sink, collected
+/// Alias for the in-memory sink — keeps test call-sites short.
+let collectSink<'T> () = Connectors.InMemory.sink<'T> ()
 
 let makeEvent severity kind =
     { Severity    = severity
@@ -75,20 +68,20 @@ let ``Source Read can yield zero items`` () = task {
 [<Fact>]
 let ``Sink Write receives all items from stream`` () = task {
     let stream = taskSeq { yield "a"; yield "b"; yield "c" }
-    let sink, collected = collectSink<string>()
+    let sink, read = collectSink<string>()
 
     do! sink.Write(stream)
 
-    Assert.Equal<string list>(["a"; "b"; "c"], List.ofSeq collected)
+    Assert.Equal<string list>(["a"; "b"; "c"], read ())
 }
 
 [<Fact>]
 let ``Sink Write receives empty stream without error`` () = task {
-    let sink, collected = collectSink<int>()
+    let sink, read = collectSink<int>()
 
     do! sink.Write(TaskSeq.empty)
 
-    Assert.Empty(collected)
+    Assert.Empty(read ())
 }
 
 // ---------------------------------------------------------------------------
@@ -100,21 +93,21 @@ let ``Pipeline run passes source items to sink`` () = task {
     let source : Source<int> = {
         Read = fun () -> taskSeq { yield 10; yield 20; yield 30 }
     }
-    let sink, collected = collectSink<int>()
+    let sink, read = collectSink<int>()
 
     do! Pipeline.run source sink
 
-    Assert.Equal<int list>([10; 20; 30], List.ofSeq collected)
+    Assert.Equal<int list>([10; 20; 30], read ())
 }
 
 [<Fact>]
 let ``Pipeline run with empty source results in empty sink`` () = task {
     let source : Source<int> = { Read = fun () -> TaskSeq.empty }
-    let sink, collected = collectSink<int>()
+    let sink, read = collectSink<int>()
 
     do! Pipeline.run source sink
 
-    Assert.Empty(collected)
+    Assert.Empty(read ())
 }
 
 // ---------------------------------------------------------------------------
@@ -169,11 +162,11 @@ let ``Pipeline runWith threads source through flow into sink`` () = task {
         Read = fun () -> taskSeq { yield 1; yield 2; yield 3; yield 4; yield 5 }
     }
     let flow = Flow.filter (fun x -> x % 2 <> 0)
-    let sink, collected = collectSink<int>()
+    let sink, read = collectSink<int>()
 
     do! Pipeline.runWith source flow sink
 
-    Assert.Equal<int list>([1; 3; 5], List.ofSeq collected)
+    Assert.Equal<int list>([1; 3; 5], read ())
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +302,7 @@ let ``Pipeline runWithContext captures validation rejections in PipelineResult``
     let ctx = ExecutionContext.``default`` ()
     let source : Source<int> = { Read = fun () -> taskSeq { yield -1; yield 2; yield -3; yield 4 } }
     let flow = Flow.validate "stage" ctx positiveValidator
-    let sink, collected = collectSink<int>()
+    let sink, read = collectSink<int>()
 
     let! result = Pipeline.runWithContext ctx source flow sink
 
@@ -317,7 +310,7 @@ let ``Pipeline runWithContext captures validation rejections in PipelineResult``
     Assert.Equal(2L, result.RecordsRejected)
     Assert.Equal(2L, result.RecordsAccepted)
     Assert.Equal(0L, result.RecordsFailed)
-    Assert.Equal<int list>([2; 4], List.ofSeq collected)
+    Assert.Equal<int list>([2; 4], read ())
 }
 
 [<Fact>]
@@ -605,7 +598,96 @@ let ``Flow batch respects ctx.BatchSize`` () = task {
     Assert.Equal<int[]>([| 3 |],    result[1])
 }
 
+// ---------------------------------------------------------------------------
+// Connectors.InMemory
+// ---------------------------------------------------------------------------
 
+[<Fact>]
+let ``InMemory source yields all items from a list`` () = task {
+    let source = Connectors.InMemory.source [1; 2; 3]
+
+    let! items = source.Read() |> TaskSeq.toListAsync
+
+    Assert.Equal<int list>([1; 2; 3], items)
+}
+
+[<Fact>]
+let ``InMemory source yields all items from an array`` () = task {
+    let source = Connectors.InMemory.source [| "a"; "b"; "c" |]
+
+    let! items = source.Read() |> TaskSeq.toListAsync
+
+    Assert.Equal<string list>(["a"; "b"; "c"], items)
+}
+
+[<Fact>]
+let ``InMemory source from empty sequence yields empty stream`` () = task {
+    let source = Connectors.InMemory.source ([] : int list)
+
+    let! items = source.Read() |> TaskSeq.toListAsync
+
+    Assert.Empty(items)
+}
+
+[<Fact>]
+let ``InMemory source Read called twice produces independent streams`` () = task {
+    let source = Connectors.InMemory.source [1; 2; 3]
+
+    let! first  = source.Read() |> TaskSeq.toListAsync
+    let! second = source.Read() |> TaskSeq.toListAsync
+
+    Assert.Equal<int list>(first, second)
+    Assert.NotSame(first, second)
+}
+
+[<Fact>]
+let ``InMemory sink collects all written items`` () = task {
+    let sink, read = Connectors.InMemory.sink ()
+    let stream = taskSeq { yield 1; yield 2; yield 3 }
+
+    do! sink.Write(stream)
+
+    Assert.Equal<int list>([1; 2; 3], read ())
+}
+
+[<Fact>]
+let ``InMemory sink snapshot is empty before write`` () =
+    let _, read = Connectors.InMemory.sink<int> ()
+
+    Assert.Empty(read ())
+
+[<Fact>]
+let ``InMemory sink write with empty stream yields empty snapshot`` () = task {
+    let sink, read = Connectors.InMemory.sink<int> ()
+
+    do! sink.Write(TaskSeq.empty)
+
+    Assert.Empty(read ())
+}
+
+[<Fact>]
+let ``InMemory sink read returns a fresh snapshot each call`` () = task {
+    let sink, read = Connectors.InMemory.sink ()
+    let stream = taskSeq { yield "x"; yield "y" }
+
+    do! sink.Write(stream)
+    let snap1 = read ()
+    let snap2 = read ()
+
+    Assert.Equal<string list>(snap1, snap2)
+    Assert.NotSame(snap1, snap2)
+}
+
+[<Fact>]
+let ``InMemory source and sink round-trip a full pipeline`` () = task {
+    let source      = Connectors.InMemory.source [1; 2; 3; 4; 5]
+    let flow        = Flow.filter (fun x -> x % 2 = 0)
+    let sink, read  = Connectors.InMemory.sink ()
+
+    do! Pipeline.runWith source flow sink
+
+    Assert.Equal<int list>([2; 4], read ())
+}
 
 [<Fact>]
 let ``DiagnosticEvent can be constructed for each Severity`` () =
