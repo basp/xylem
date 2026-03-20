@@ -392,9 +392,7 @@ The enricher signature is `'T -> Result<'TOut, ErrorKind>`, making
 > the shape, only the record's worthiness is in question. Use `validate`
 > when you are checking; use `enrich` when you are transforming.
 
----
-
-## `Flow.batch`
+### `Flow.batch`
 
 `Flow.batch` groups a stream of individual items into a stream of
 fixed-size arrays. It is a pure structural transform — it needs no
@@ -405,7 +403,7 @@ fixed-size arrays. It is a pure structural transform — it needs no
 let flow : Flow<Row, Row[]> = Flow.batch 100
 ```
 
-### Behaviour
+#### Behaviour
 
 | Scenario | Result |
 |---|---|
@@ -419,7 +417,7 @@ let flow : Flow<Row, Row[]> = Flow.batch 100
 **The partial last batch is always emitted.** Records are never silently
 dropped because the final group is smaller than `batchSize`.
 
-### Using `ctx.BatchSize`
+#### Using `ctx.BatchSize`
 
 `BatchSize` is a first-class field on `ExecutionContext` for exactly
 this purpose. Pass it directly to respect the pipeline's configured
@@ -432,7 +430,7 @@ let flow = Flow.batch ctx.BatchSize
 This keeps the batch size in one place — the context — rather than
 hard-coding it at each call site.
 
-### Output type: `'T[]`
+#### Output type: `'T[]`
 
 `batch` emits `'T[]` (array), not `'T list` or `seq<'T>`. Arrays are:
 
@@ -445,7 +443,7 @@ hard-coding it at each call site.
 `'T list` would be equally safe but adds an allocation and a traversal
 for callers that need to hand the batch to a .NET API expecting an array.
 
-### Composing `batch` with other flows
+#### Composing `batch` with other flows
 
 Because the output type changes from `'T` to `'T[]`, `batch` is
 typically the **last** flow in a composed pipeline:
