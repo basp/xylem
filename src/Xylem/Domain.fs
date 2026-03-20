@@ -8,8 +8,10 @@ module Domain =
 
     /// <summary>
     /// The origin of a data pipeline — absorbs records from the ground up.
-    /// Calling <c>Read ()</c> starts a fresh, independent stream each time.
     /// </summary>
+    /// <remarks>
+    /// Calling <c>Read ()</c> starts a fresh, independent stream each time.
+    /// </remarks>
     type Root<'T> = {
         /// <summary>
         /// Starts a fresh, independent stream of records of type <c>'T</c>.
@@ -19,8 +21,10 @@ module Domain =
 
     /// <summary>
     /// The destination of a data pipeline — where records are delivered.
-    /// The leaf owns iteration, allowing bulk operations and internal buffering.
     /// </summary>
+    /// <remarks>
+    /// The leaf owns iteration, allowing bulk operations and internal buffering.
+    /// </remarks>   
     type Leaf<'T> = {
         /// <summary>
         /// Consumes a stream of records of type <c>'T</c> and performs the write operation.
@@ -30,8 +34,10 @@ module Domain =
 
     /// <summary>
     /// A xylem vessel that carries records from <c>'TIn</c> to <c>'TOut</c>.
-    /// The transform is lazy — no sap flows until the stream is consumed.
     /// </summary>
+    /// <remarks>
+    /// The transform is lazy — no sap flows until the stream is consumed.
+    /// </remarks>  
     type Vessel<'TIn, 'TOut> = {
         /// <summary>
         /// Applies the underlying transform from <c>'TIn</c> to <c>'TOut</c>.
@@ -66,10 +72,14 @@ module Domain =
 
     /// <summary>
     /// What went wrong — machine-readable and pattern-matchable.
-    /// Use <c>Custom</c> for domain-specific kinds without modifying the library.
+    /// </summary>
+    /// <remarks>
+    /// <p>Use <c>Custom</c> for domain-specific kinds without modifying the library.</p>
+    /// <p>
     /// Note: adding a new well-known case is a breaking change by design,
     /// forcing callers to explicitly handle it.
-    /// </summary>
+    /// </p>
+    /// </remarks>
     type ErrorKind =
         /// <summary>
         /// System-level error (e.g., exception).
@@ -132,8 +142,10 @@ module Domain =
 
     /// <summary>
     /// Controls how the pipeline retries on failure.
-    /// <c>NoRetry</c> means failures are immediately final.
-    /// <c>FixedDelay</c> retries up to <c>maxAttempts</c> times with a constant delay between attempts.
+    /// <ul>
+    /// <li><c>NoRetry</c> means failures are immediately final.</li>
+    /// <li><c>FixedDelay</c> retries up to <c>maxAttempts</c> times with a constant delay between attempts.</li>
+    /// </ul>
     /// </summary>
     type RetryPolicy =
         /// <summary>No retries — a failure is immediately final.</summary>
@@ -146,8 +158,10 @@ module Domain =
 
     /// <summary>
     /// Coordinates a single pipeline run: configuration, cancellation, and diagnostic emission.
-    /// Create via <c>ExecutionContext.create</c> or <c>ExecutionContext.default</c>.
     /// </summary>
+    /// <remarks>
+    /// Create via <c>ExecutionContext.create</c> or <c>ExecutionContext.default</c>.
+    /// </remarks>
     type ExecutionContext = {
         /// <summary>Signals cooperative cancellation to the pipeline.</summary>
         CancellationToken: System.Threading.CancellationToken
@@ -219,10 +233,12 @@ module ExecutionContext =
 
     /// <summary>
     /// Creates a new <c>ExecutionContext</c> for a single pipeline run.
+    /// </summary>
+    /// <remarks>
     /// All pulses emitted via <c>Emit</c> are readable via <c>ReadEvents</c>.
     /// <c>Emit</c> is thread-safe: concurrent calls are serialized via a lock,
     /// and the emission order is preserved.
-    /// </summary>
+    /// </remarks>
     let create (token: System.Threading.CancellationToken) (batchSize: int) : ExecutionContext =
         let events = ResizeArray<Pulse>()
         let gate   = obj ()
@@ -268,10 +284,12 @@ module Harvest =
 
     /// <summary>
     /// Aggregates a list of pulses into per-stage rings.
+    /// </summary>
+    /// <remarks>
     /// Pulses are grouped by <c>Stage</c> (with <c>None</c> as a valid group
     /// for pipeline-level pulses). The order of rings follows the first
     /// occurrence of each stage in the pulse list.
-    /// </summary>
+    /// </remarks>
     let summarizeByStage (events: Pulse list) : Ring list =
         let order = ResizeArray<string option>()
         let acc   = Dictionary<string, int64 * int64 * int64 * int64>()
@@ -334,11 +352,17 @@ module Vessel =
 
     /// <summary>
     /// Creates a <c>Vessel</c> that validates every item using <c>validator</c>.
+    /// </summary>
+    /// <remarks>
+    /// <p>
     /// Items for which <c>validator</c> returns <c>Ok</c> are passed downstream unchanged.
+    /// </p>
+    /// <p>
     /// Items for which it returns <c>Error</c> are dropped, and a <c>Pulse</c>
     /// of severity <c>Error</c> is emitted via <c>ctx</c>, recording the stage name,
     /// 0-based stream index, and the <c>ErrorKind</c> returned by the validator.
-    /// </summary>
+    /// </p>
+    /// </remarks>
     let validate (stageName: string) (ctx: ExecutionContext) (validator: 'T -> Result<'T, ErrorKind>) : Vessel<'T, 'T> =
         { Transform = fun stream ->
             // Mutable `index` works because `taskSeq` iterates sequentially.
@@ -366,13 +390,18 @@ module Vessel =
     /// Creates a <c>Vessel</c> that enriches every item using <c>enricher</c>.
     /// Items for which <c>enricher</c> returns <c>Ok</c> are passed downstream
     /// as the (potentially type-changed) enriched value.
-    /// Items for which it returns <c>Error</c> are dropped, and a
+    /// </summary>
+    /// <remarks>
+    /// <p>Items for which it returns <c>Error</c> are dropped, and a
     /// <c>Pulse</c> of severity <c>Error</c> is emitted via <c>ctx</c>,
     /// recording the stage name, 0-based stream index, and the <c>ErrorKind</c>
     /// returned by the enricher.
+    /// </p>
+    /// <p>
     /// Unlike <c>validate</c>, the enricher may change the record type from
     /// <c>'T</c> to <c>'TOut</c> — useful for lookups, projections, and joins.
-    /// </summary>
+    /// </p>
+    /// </remarks>
     let enrich (stageName: string) (ctx: ExecutionContext) (enricher: 'T -> Result<'TOut, ErrorKind>) : Vessel<'T, 'TOut> =
         { Transform = fun stream ->
             let mutable index = 0L
@@ -399,9 +428,11 @@ module Vessel =
     /// Creates a <c>Vessel</c> that groups consecutive items into arrays of at most
     /// <c>batchSize</c> items. The final batch is emitted even if it contains
     /// fewer than <c>batchSize</c> items.
+    /// </summary>
+    /// <remarks>
     /// Throws <c>ArgumentException</c> if <c>batchSize</c> is less than 1.
     /// To use the pipeline's configured batch size, pass <c>ctx.BatchSize</c>.
-    /// </summary>
+    /// </remarks>
     let batch (batchSize: int) : Vessel<'T, 'T[]> =
         if batchSize < 1 then
             raise (ArgumentException($"batchSize must be >= 1, was {batchSize}", nameof batchSize))
@@ -438,6 +469,8 @@ module Pipeline =
     /// Runs a pipeline under an <c>ExecutionContext</c> and returns a structured
     /// <c>Harvest</c>. Counts every record emitted by the root, measures
     /// wall-clock duration, and collects all pulses from <c>ctx</c>.
+    /// </summary>
+    /// <remarks>
     /// Any unhandled exception (e.g., a connector I/O failure) is caught, emitted
     /// as a <c>Fatal</c> pulse, and the function returns a well-formed
     /// <c>Harvest</c> reflecting the partial run rather than faulting the task.
@@ -445,7 +478,7 @@ module Pipeline =
     /// re-executed from scratch on failure, up to the configured number of attempts.
     /// Each retry emits a <c>Warning</c>-level pulse. If all retries are
     /// exhausted, a <c>Fatal</c> pulse is emitted and the partial result is returned.
-    /// </summary>
+    /// </remarks>
     let runWithContext
             (ctx:    ExecutionContext)
             (root:   Root<'TIn>)
