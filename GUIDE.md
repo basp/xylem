@@ -152,7 +152,7 @@ control over its iteration strategy:
 
 - A **map** flow transforms each item individually.
 - A **filter** flow skips items that don't match a predicate.
-- A **batch** flow (future) can group items into chunks before emitting.
+- A **batch** flow can group items into chunks before emitting.
 - A **window** flow (future) can look ahead or behind.
 
 All of these are impossible with an item-by-item `'TIn -> 'TOut`
@@ -536,8 +536,8 @@ carries the exception's message as the human-readable summary.
 ## Connectors
 
 A **connector** is a `Source<'T>` or `Sink<'T>` that ties the pipeline
-to a specific data store or transport. The core library ships one
-connector out of the box: `Xylem.Connectors.InMemory`. File, JSON/CSV,
+to a specific data store or transport. The core library ships two connectors out of the box:
+`Xylem.Connectors.InMemory` and `Xylem.Connectors.File`. JSON/CSV,
 database, and queue connectors are planned for future releases.
 
 ### `Xylem.Connectors.InMemory`
@@ -893,8 +893,8 @@ This is the overload to use in tests (see *Testing without I/O* below).
 Wraps `sinkFrom` with a `StreamWriter` factory for a file path:
 
 ```fsharp
-// Overwrite (default)
-let sink : Sink<string> = File.sink "output.csv"
+// Overwrite (default) — one-arg convenience
+let sink : Sink<string> = File.sinkDefault "output.csv"
 
 // With explicit options
 let sink = File.sink "output.csv" { FileSinkOptions.Default with Append = true }
@@ -985,7 +985,7 @@ let flow =
                 if row.Age >= 0 then Ok row
                 else Result.Error (ValidationError("Age", "must be non-negative"))))
             (Flow.map formatLine))
-let sink = File.sink "people-clean.csv"
+let sink = File.sinkDefault "people-clean.csv"
 
 let! result = Pipeline.runWithContext ctx source flow sink
 

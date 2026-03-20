@@ -43,10 +43,18 @@ aims to be the same for data pipelines.
 
 ## Current state
 
-The repository is **greenfield scaffolding**.  
-- `src/Xylem/Library.fs` — placeholder module, no real domain code yet.  
-- `src/Xylem.Tests/Tests.fs` — skeleton xUnit test file.  
-- `src/Xylem/Sandbox.fsx` — empty script for ad-hoc exploration.
+The repository is **mid-v1** — the core pipeline model, diagnostics, execution
+engine, basic transforms, and first connectors are all implemented and tested.
+
+- `src/Xylem/Domain.fs` — core types (`Source`, `Flow`, `Sink`, `Pipeline`,
+  `ExecutionContext`, `PipelineResult`), diagnostics model, flow combinators
+  (`map`, `filter`, `compose`, `validate`, `enrich`, `batch`), and pipeline
+  runners (`run`, `runWith`, `runWithContext`).
+- `src/Xylem/InMemory.fs` — in-memory source and sink for tests and examples.
+- `src/Xylem/File.fs` — line-oriented file source and sink with factory
+  constructors for testability.
+- `src/Xylem/Sandbox.fsx` — script for ad-hoc exploration.
+- `src/Xylem.Tests/` — 70 passing tests covering all implemented features.
 
 ---
 

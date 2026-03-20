@@ -50,8 +50,8 @@
 - [x] In-memory sink
 
 ### 8. File connectors
-- [ ] File source
-- [ ] File sink
+- [x] File source
+- [x] File sink
 
 ### 9. JSON / CSV connector
 - [ ] JSON connector
