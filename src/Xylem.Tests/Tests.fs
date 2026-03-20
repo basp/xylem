@@ -139,19 +139,6 @@ let ``Flow filter keeps only matching items`` () = task {
 }
 
 [<Fact>]
-let ``Flow map then filter via compose`` () =
-    task {
-        let flow =
-            Flow.filter (fun x -> x > 4)
-            |> Flow.compose (Flow.map (fun x -> x * 2))
-        let input = taskSeq { yield 1; yield 2; yield 3 }
-
-        let! result = flow.Transform(input) |> TaskSeq.toListAsync
-
-        Assert.Equal<int list>([6], result)
-    }
-
-[<Fact>]
 let ``Flow map on empty stream yields empty stream`` () = task {
     let flow = Flow.map (fun x -> x * 2)
 
@@ -201,9 +188,20 @@ let ``ExecutionContext Emit accumulates multiple events in order`` () =
     Assert.Equal(3, events.Length)
     Assert.Equal<Severity list>([Info; Warning; Error], events |> List.map _.Severity)
 
-module FlowCombinatorTests =
+module FlowComposeTests =
     open Xylem.Flow    
     
+    [<Fact>]
+    let ``Flow map then filter via compose`` () =
+        task {
+            let flow = map (fun x -> x * 2) >>> filter (fun x -> x > 4)
+            let input = taskSeq { yield 1; yield 2; yield 3 }
+
+            let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+            Assert.Equal<int list>([6], result)
+        }
+
     // ---------------------------------------------------------------------------
     // Flow.validate
     // ---------------------------------------------------------------------------
