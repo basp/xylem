@@ -1,7 +1,6 @@
 # Connectors
 
-> Built-in connectors that ship with Xylem — InMemory for tests and
-> File for local file system I/O.
+Built-in connectors that ship with Xylem — `InMemory` for tests and `File` for local file system I/O.
 
 ---
 

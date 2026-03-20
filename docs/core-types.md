@@ -1,7 +1,6 @@
 # Core Types
 
-> The three building blocks of every Xylem pipeline: `Root`, `Vessel`,
-> and `Leaf`.
+The three building blocks of every Xylem pipeline: `Root`, `Vessel`, and `Leaf`.
 
 ---
 

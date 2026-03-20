@@ -1,7 +1,6 @@
 # Diagnostics Model
 
-> Xylem's structured diagnostics — Severity, ErrorKind, Pulse, Harvest,
-> and Ring — designed so failures are loud, structured, and traceable.
+Xylem's structured diagnostics — Severity, ErrorKind, Pulse, Harvest, and Ring — designed so failures are loud, structured, and traceable.
 
 ---
 

@@ -1,7 +1,6 @@
 # Retry Policy
 
-> How Xylem retries failed pipelines — configuration, behaviour, and
-> diagnostic events.
+How Xylem retries failed pipelines — configuration, behaviour, and diagnostic events.
 
 ---
 

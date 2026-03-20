@@ -1,7 +1,6 @@
 # Connector Authoring Guide
 
-> How to write custom connectors for Xylem — sources, sinks, and the
-> patterns that keep them testable.
+How to write custom connectors for Xylem — sources, sinks, and the patterns that keep them testable.
 
 ---
 

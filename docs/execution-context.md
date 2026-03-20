@@ -1,7 +1,6 @@
 # Execution Context
 
-> The runtime coordinator for a pipeline run — carrying cancellation,
-> batch size, diagnostic emission, and retry policy.
+The runtime coordinator for a pipeline run — carrying cancellation, batch size, diagnostic emission, and retry policy.
 
 ---
 

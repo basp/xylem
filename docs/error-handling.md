@@ -1,7 +1,6 @@
 # Error Handling Guide
 
-> How Xylem handles failures — from per-record rejections to pipeline-level
-> crashes — and how to work with the results.
+How Xylem handles failures — from per-record rejections to pipeline-level crashes — and how to work with the results.
 
 ---
 
