@@ -66,7 +66,7 @@
 - [x] Quickstart guide
 - [x] Pipeline composition guide
 - [x] Diagnostics guide
-- [ ] Error handling guide
+- [x] Error handling guide
 - [ ] Connector authoring guide
 
 ---
