@@ -298,6 +298,125 @@ type PipelineResult = {
 conveniences — they are always consistent with `Events` and save callers
 from folding the list themselves.
 
+### `StageSummary`
+
+A per-stage aggregation of diagnostic event counts:
+
+```fsharp
+type StageSummary = {
+    Stage:        string option
+    InfoCount:    int64
+    WarningCount: int64
+    ErrorCount:   int64
+    FatalCount:   int64
+    TotalCount:   int64
+}
+```
+
+`Stage` mirrors `DiagnosticEvent.Stage` — it is `Some "validate"` for
+events emitted by a named flow, or `None` for pipeline-level events such
+as retry warnings or fatal exceptions caught by `runWithContext`.
+
+#### Producing summaries
+
+`PipelineResult.summarizeByStage` folds a `DiagnosticEvent list` into a
+`StageSummary list`:
+
+```fsharp
+let result = PipelineResult.fromEvents count duration (ctx.ReadEvents())
+let summaries = PipelineResult.summarizeByStage result.Events
+```
+
+The returned list preserves **first-occurrence order** — summaries
+appear in the order their stage was first seen in the event stream. This
+gives callers a natural pipeline-order view without requiring stages to
+carry explicit sequence numbers.
+
+#### Typical usage
+
+After a pipeline run, summaries answer questions like *"how many records
+did the validate stage reject?"* without scanning the raw event list:
+
+```fsharp
+let summaries = PipelineResult.summarizeByStage result.Events
+
+for s in summaries do
+    let stage = s.Stage |> Option.defaultValue "(pipeline)"
+    printfn $"{stage}: {s.ErrorCount} errors, {s.WarningCount} warnings"
+```
+
+Events with `Stage = None` are grouped together — they typically contain
+retry diagnostics, fatal pipeline exceptions, or any other event not
+tied to a specific flow stage.
+
+### Design decisions — `StageSummary`
+
+#### Standalone function, not a `PipelineResult` field
+
+`summarizeByStage` is a standalone function in the `PipelineResult`
+module rather than a pre-computed field on the `PipelineResult` record.
+
+The alternative — adding a `StageSummaries: StageSummary list` field to
+`PipelineResult` and populating it in `fromEvents` — was considered but
+rejected for several reasons:
+
+1. **Not every caller needs summaries.** Pre-computing them on every run
+   adds allocation and computation that simple pipelines (or pipelines
+   that only check top-level counts) would never use.
+2. **Record stability.** Adding a field to `PipelineResult` is a
+   breaking change for anyone pattern-matching or constructing the
+   record directly. A new function in the module is additive.
+3. **Composability.** Callers can filter or transform the event list
+   before summarizing (e.g. only summarize errors, or only events from
+   a specific time window). A pre-computed field would force
+   re-computation for those use cases.
+
+The trade-off is that callers who *do* want summaries must call the
+function explicitly. This is a minor inconvenience compared to the
+flexibility gained.
+
+#### Grouping by `string option`, not a `Stage` type
+
+Stages are identified by their `string option` name, matching the
+`DiagnosticEvent.Stage` field. An alternative would be a dedicated
+`Stage` type with richer metadata (ordering, parent pipeline, etc.).
+
+This was deferred because:
+
+1. The current model has no first-class `Stage` concept — stages are
+   just names passed to `Flow.validate`, `Flow.enrich`, etc.
+2. Introducing a `Stage` type would ripple through `ExecutionContext`,
+   flow combinators, and event construction — significant churn for
+   marginal benefit at v1 scope.
+3. String names are simple, debuggable, and sufficient for grouping.
+
+If v2 introduces sub-pipelines or reusable fragments, a richer `Stage`
+type may become worthwhile.
+
+#### First-occurrence ordering
+
+Summaries are ordered by the first time each stage appears in the event
+list, not alphabetically or by event count. This was chosen because:
+
+1. It naturally reflects pipeline execution order — the first stage to
+   emit an event appears first in the summary.
+2. It requires no explicit ordering metadata on stages.
+3. Alphabetical ordering would scramble the pipeline flow; count-based
+   ordering would vary between runs.
+
+The trade-off is that a stage emitting no events has no summary entry.
+This is consistent with the principle that summaries reflect *what
+happened*, not *what was configured*. A future enhancement could accept
+a list of known stage names and produce zero-count entries for quiet
+stages, but this adds complexity without a clear use case today.
+
+#### `int64` counts, not `int`
+
+Counts use `int64` to stay consistent with `PipelineResult.RecordsRead`
+and other counters. This avoids lossy conversions when comparing summary
+counts against pipeline-level totals, and future-proofs against large
+event volumes.
+
 ---
 
 ## `ExecutionContext`

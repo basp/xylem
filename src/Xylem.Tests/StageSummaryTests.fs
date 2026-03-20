@@ -54,7 +54,8 @@ let ``summarizeByStage includes stageless events under None`` () =
 [<Fact>]
 let ``summarizeByStage counts all severity levels`` () =
     let events = [
-        { Helpers.makeEvent Info    (Custom("a", Map.empty)) with Stage = Some "s1" }
+        { Helpers.makeEvent Info    (Custom("a1", Map.empty)) with Stage = Some "s1" }
+        { Helpers.makeEvent Info    (Custom("a2", Map.empty)) with Stage = Some "s1" }
         { Helpers.makeEvent Warning (Custom("b", Map.empty)) with Stage = Some "s1" }
         { Helpers.makeEvent Error   (Custom("c", Map.empty)) with Stage = Some "s1" }
         { Helpers.makeEvent Fatal   (Custom("d", Map.empty)) with Stage = Some "s1" }
@@ -62,11 +63,11 @@ let ``summarizeByStage counts all severity levels`` () =
     let summaries = PipelineResult.summarizeByStage events
     Assert.Equal(1, summaries.Length)
     let s = summaries.Head
-    Assert.Equal(1L, s.InfoCount)
+    Assert.Equal(2L, s.InfoCount)
     Assert.Equal(1L, s.WarningCount)
     Assert.Equal(1L, s.ErrorCount)
     Assert.Equal(1L, s.FatalCount)
-    Assert.Equal(4L, s.TotalCount)
+    Assert.Equal(5L, s.TotalCount)
 
 [<Fact>]
 let ``summarizeByStage preserves stage ordering by first occurrence`` () =
