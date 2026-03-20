@@ -247,7 +247,13 @@ type ErrorKind =
     | BusinessRuleViolation of rule: string * reason: string
     | PipelineError         of stage: string * exn
     | Custom                of tag: string * data: Map<string, string>
+    | RetryError            of attempt: int * exn
 ```
+
+`RetryError` is emitted by the retry engine (see *"Retry policy"* below)
+and carries the 1-based attempt number alongside the exception. Callers
+can pattern-match on it to distinguish retry-related diagnostics from
+other failures.
 
 **Adding a new well-known case is intentionally a breaking change.**
 Exhaustive pattern matches will fail to compile, forcing every caller to
@@ -308,6 +314,7 @@ type ExecutionContext = {
     BatchSize:         int
     Emit:              DiagnosticEvent -> unit
     ReadEvents:        unit -> DiagnosticEvent list
+    RetryPolicy:       RetryPolicy
 }
 ```
 
@@ -315,8 +322,9 @@ type ExecutionContext = {
 |---|---|
 | `CancellationToken` | Signals cooperative cancellation; ctx-aware flows check it per item |
 | `BatchSize` | Preferred number of records per batch for batch-aware sinks and flows |
-| `Emit` | Records a `DiagnosticEvent` for the current run |
+| `Emit` | Records a `DiagnosticEvent` for the current run (thread-safe) |
 | `ReadEvents` | Returns all events emitted so far, in emission order |
+| `RetryPolicy` | Controls retry behaviour on pipeline failure (default: `NoRetry`) |
 
 ### Creating a context
 
@@ -330,12 +338,11 @@ let ctx = ExecutionContext.create cts.Token 500
 ```
 
 `ExecutionContext.create` wires `Emit` and `ReadEvents` to the same
-internal `ResizeArray`, so every event emitted during a run is
-retrievable at the end.
-
-> **Note:** The current `Emit` implementation is not thread-safe.
-> Concurrent flow execution is a v2 concern; for now all ctx-aware
-> combinators iterate sequentially.
+internal `ResizeArray`, guarded by a `lock`. This means `Emit` is
+**thread-safe**: concurrent calls are serialised and emission order is
+preserved. `ReadEvents` also acquires the lock and returns an
+independent `list` snapshot — callers can read safely while other
+threads continue emitting.
 
 ---
 
@@ -502,26 +509,35 @@ for e in result.Events do
 The runner checks `ctx.CancellationToken` before starting so that an
 already-cancelled token throws immediately without touching the source.
 
-### Unhandled exceptions — guaranteed `PipelineResult`
+### Unhandled exceptions — retries and guaranteed `PipelineResult`
 
-`runWithContext` wraps the inner run in a `try/catch`. If any unhandled
-exception escapes — from a connector, a flow, or a sink — the runner
-catches it, emits one `Fatal`-severity `DiagnosticEvent`, stops the
-stopwatch, and returns a well-formed `PipelineResult` reflecting the
-partial run:
+`runWithContext` handles failures according to the `RetryPolicy` on the
+context. With the default `NoRetry`, any unhandled exception is caught,
+emitted as one `Fatal`-severity `DiagnosticEvent`, and a well-formed
+`PipelineResult` is returned reflecting the partial run.
+
+When a `FixedDelay` retry policy is configured, the engine re-executes
+the **entire pipeline** from scratch on each retry. Each failed attempt
+emits a `Warning`-level `RetryError` event. If all retries are
+exhausted, a `Fatal`-level `RetryError` event is emitted and the partial
+result is returned:
 
 ```fsharp
-// result is always returned — even on hard failures
+// Retry up to 3 times with 500ms between attempts
+let ctx = { ExecutionContext.``default`` () with RetryPolicy = FixedDelay(3, TimeSpan.FromMilliseconds 500.0) }
+
 let! result = Pipeline.runWithContext ctx source flow sink
 
-if result.RecordsFailed > 0L then
-    for e in result.Events |> List.filter (fun e -> e.Severity = Fatal) do
-        printfn $"FATAL: {e.Message}"
+// Inspect retry diagnostics
+for e in result.Events do
+    match e.Kind with
+    | RetryError (attempt, ex) ->
+        printfn $"[%A{e.Severity}] Attempt {attempt}: {ex.Message}"
+    | _ -> ()
 ```
 
-The emitted event uses `SystemError ex` as the `Kind`, has no `Stage`
-or `RecordIndex` (the failure is not tied to a specific record), and
-carries the exception's message as the human-readable summary.
+See the *"Design decision: retry policy"* section below for the full
+rationale.
 
 **What this guarantees:**
 
@@ -699,6 +715,7 @@ type ExecutionContext = {
     BatchSize:         int
     Emit:              DiagnosticEvent -> unit
     ReadEvents:        unit -> DiagnosticEvent list
+    RetryPolicy:       RetryPolicy
 }
 ```
 
@@ -803,7 +820,183 @@ Cancellation is not a failure — it is a deliberate stop signal. Catching
 it would suppress the caller's ability to detect that the pipeline was
 cancelled rather than failed. The pre-existing
 `ThrowIfCancellationRequested()` check at the top of `runWithContext`
-continues to propagate normally.
+continues to propagate normally. This also applies during retries —
+cancellation between retry attempts (during the delay) propagates
+immediately rather than being swallowed.
+
+---
+
+## Retry policy
+
+### `RetryPolicy`
+
+```fsharp
+type RetryPolicy =
+    | NoRetry
+    | FixedDelay of maxAttempts: int * delay: TimeSpan
+```
+
+| Case | Behaviour |
+|---|---|
+| `NoRetry` | Failure is immediately final. This is the default. |
+| `FixedDelay(n, d)` | On failure, wait `d`, then re-run the pipeline from scratch. Repeat up to `n` times. Total executions = `n + 1` (initial + retries). |
+
+### Configuring retry
+
+Set `RetryPolicy` on the `ExecutionContext` using a record update:
+
+```fsharp
+let ctx =
+    { ExecutionContext.``default`` () with
+        RetryPolicy = FixedDelay(3, TimeSpan.FromSeconds 1.0) }
+```
+
+### What gets retried
+
+The retry loop wraps the **entire pipeline**: source → flow → sink.
+On each retry, `source.Read()` is called again, the flow processes from
+the beginning, and the sink receives a fresh stream. The record count
+is reset per attempt — `PipelineResult.RecordsRead` reflects only the
+last (successful or final) attempt.
+
+### Diagnostic events during retries
+
+Each failed attempt emits a `Warning`-level event with `RetryError`:
+
+```fsharp
+{ Severity = Warning
+  Kind     = RetryError(1, ex)   // 1-based attempt number
+  Stage    = None
+  ...
+  Message  = "Attempt 1 failed: <message>. Retrying in 1000ms…" }
+```
+
+If all retries are exhausted, a `Fatal`-level `RetryError` is emitted:
+
+```fsharp
+{ Severity = Fatal
+  Kind     = RetryError(4, ex)   // final attempt (initial + 3 retries)
+  ...
+  Message  = "Pipeline failed after 4 attempt(s): <message>" }
+```
+
+### Example: retry with inspection
+
+```fsharp
+open System
+
+let ctx =
+    { ExecutionContext.``default`` () with
+        RetryPolicy = FixedDelay(2, TimeSpan.FromMilliseconds 200.0) }
+
+let! result = Pipeline.runWithContext ctx source flow sink
+
+printfn $"Read: %d{result.RecordsRead}  Failed: %d{result.RecordsFailed}"
+
+let retries =
+    result.Events
+    |> List.choose (fun e ->
+        match e.Kind with
+        | RetryError (attempt, _) -> Some (e.Severity, attempt)
+        | _ -> None)
+
+for (sev, attempt) in retries do
+    printfn $"  [{sev}] attempt {attempt}"
+```
+
+---
+
+## Design decision: retry policy
+
+### The problem
+
+`runWithContext` catches unhandled exceptions and returns a
+`PipelineResult`, but the pipeline fails permanently on the first
+error. Transient failures — network glitches, file locks, temporary
+service unavailability — are common in ETL workloads and ideally
+shouldn't require manual restarting.
+
+### Three options considered
+
+**Option A — per-record retry (rejected)**
+
+Retry individual records that fail inside a flow or sink. This is the
+most granular approach and avoids re-reading the source.
+
+*Why rejected:* Requires record-level buffering, replay infrastructure,
+and checkpoint support. A failed record inside a `taskSeq` pipeline
+can't simply be "replayed" without rewinding the async enumerator —
+which `IAsyncEnumerable` doesn't support. This is v2 territory (paired
+with checkpointing and dead-letter handling).
+
+**Option B — whole-pipeline retry (chosen, implemented)**
+
+On failure, re-execute the entire pipeline from `source.Read()`. The
+source produces a fresh stream, the flow transforms from scratch, and
+the sink receives fresh output.
+
+*Why chosen:*
+- **Simple and predictable.** No buffering, no partial state, no
+  enumerator rewinding. The pipeline is stateless by design — re-running
+  it is the same as running it for the first time.
+- **Correct for idempotent sources.** Files, databases with stable
+  queries, and API endpoints with deterministic responses all produce the
+  same data on re-read. This covers the vast majority of ETL sources.
+- **Composes with existing guarantees.** The `try/catch` in
+  `runWithContext` already handles exceptions uniformly. Retry is a loop
+  around the same mechanism — no new error paths.
+- **Diagnostic events accumulate across attempts.** `Warning` events from
+  early attempts remain in the context alongside the final `Fatal` or
+  success, giving full visibility into the retry history.
+
+**Option C — external retry (caller-side) (rejected)**
+
+Don't build retry into the engine. Let callers wrap `runWithContext` in
+their own retry loop.
+
+*Why rejected:* Callers would need to re-create the `ExecutionContext`
+(to reset events) or manage event accumulation themselves. The retry
+logic is tightly coupled to the diagnostic emission model — the engine
+is the natural place for it.
+
+### Trade-offs of whole-pipeline retry
+
+| Concern | Assessment |
+|---|---|
+| Non-idempotent sources | Re-reading may produce different data or trigger side effects. Callers with non-idempotent sources should use `NoRetry`. |
+| Sink side effects | A sink that already wrote partial output before the failure will receive a fresh stream on retry. Sinks that append (e.g. `File.sink` with `Append = true`) may duplicate records. Overwrite-by-default sinks are safe. |
+| Performance | Re-reading the full source is wasteful if the failure happened near the end. Acceptable at v1; per-record retry with checkpointing is a v2 concern. |
+| Event accumulation | Events from failed attempts persist in the context. This is intentional — they provide retry history — but callers should be aware that `result.Events` may contain `Warning`-level `RetryError` events from earlier attempts. |
+
+### Why `FixedDelay` only (for now)
+
+Exponential backoff, jitter, and circuit-breaker patterns are valuable
+for production resilience but add configuration surface and testing
+complexity. `FixedDelay` covers the 80% case (transient I/O failures
+with a short pause) and is easy to reason about. The `RetryPolicy` DU
+is designed for extension — adding `ExponentialBackoff of maxAttempts *
+initialDelay * multiplier` in v2 is a non-breaking change.
+
+### Why `Emit` is synchronous and thread-safe
+
+The `Emit` field on `ExecutionContext` is `DiagnosticEvent -> unit`
+rather than `DiagnosticEvent -> Task<unit>`. This was a deliberate
+choice:
+
+- **Ergonomics.** Every call site in `validate`, `enrich`, and the retry
+  loop would need `do! ctx.Emit ...` instead of `ctx.Emit ...`. The
+  async friction compounds across every ctx-aware combinator.
+- **Current consumers are in-memory.** Events are collected into a
+  `ResizeArray` — an inherently synchronous operation. There is no async
+  work to perform.
+- **Thread-safety is sufficient.** The `lock`-guarded `ResizeArray`
+  handles concurrent access safely. Under contention, the lock serialises
+  writes without deadlock risk (the critical section is a single `Add`).
+- **Future async emission.** If v2 needs to stream events to an external
+  sink (e.g. a logging service), an `EmitAsync: DiagnosticEvent ->
+  Task<unit>` field can be added alongside `Emit` without breaking
+  existing callers. The engine can call `EmitAsync` when present and fall
+  back to `Emit` otherwise.
 
 ---
 ## File Connectors
