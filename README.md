@@ -152,10 +152,8 @@ transforms, and first connectors are implemented and covered by 83 passing tests
 
 ### What's next
 
-- ✅ Basic retry policy (with thread-safe diagnostics)
-- ✅ Per-stage diagnostic summaries
-- ⬜ JSON and CSV connectors
 - ⬜ Error handling and connector authoring guides
+- ⬜ JSON and CSV connectors (nice-to-have)
 
 See [ROADMAP.md](ROADMAP.md) for the full v1 and v2 plan, and
 [CHECKLIST.md](CHECKLIST.md) for detailed progress tracking.

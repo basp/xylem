@@ -9,7 +9,7 @@
 | Batch processing support | v1 | High | Execution engine | Processes data in manageable chunks |
 | Basic transforms | v1 | High | Core domain model, execution engine | Provides map/filter/validate/enrich operations |
 | File root and leaf | v1 | High | Execution engine, error handling strategy | Enables practical real-world ETL scenarios |
-| JSON or CSV connector | v1 | Medium | File root/leaf | Adds a common interchange format |
+| JSON or CSV connector | v1 | Low | File root/leaf | Adds a common interchange format (nice-to-have) |
 | In-memory test connector | v1 | Medium | Core domain model | Simplifies testing and examples |
 | Integration and diagnostics tests | v1 | High | All v1 core features | Verifies correctness and observability |
 | Public API documentation | v1 | High | Core v1 features | Makes the library usable and understandable |
