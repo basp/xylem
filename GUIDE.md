@@ -145,6 +145,12 @@ type Flow<'TIn, 'TOut> = {
 }
 ```
 
+> **Flow vs Pipeline:** A `Flow` defines *what* transformation to apply
+> — it is a reusable, composable value. The `Pipeline` module defines
+> *how* to execute a complete Source → Flow → Sink chain. Think of a
+> `Flow` as a recipe and `Pipeline.runWithContext` as the kitchen that
+> runs it.
+
 ### Why a stream-to-stream function?
 
 Passing the whole stream (rather than item-by-item) gives the flow full
