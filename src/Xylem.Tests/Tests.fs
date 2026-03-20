@@ -21,6 +21,14 @@ let collectSink<'T> () =
     }
     sink, collected
 
+let makeEvent severity kind =
+    { Severity    = severity
+      Kind        = kind
+      Stage       = None
+      RecordIndex = None
+      Timestamp   = DateTimeOffset.UtcNow
+      Message     = "test event" }
+
 // ---------------------------------------------------------------------------
 // Source<'T>
 // ---------------------------------------------------------------------------
@@ -169,16 +177,327 @@ let ``Pipeline runWith threads source through flow into sink`` () = task {
 }
 
 // ---------------------------------------------------------------------------
-// Diagnostics — Severity, ErrorKind, DiagnosticEvent, PipelineResult
+// ExecutionContext
 // ---------------------------------------------------------------------------
 
-let makeEvent severity kind =
-    { Severity    = severity
-      Kind        = kind
-      Stage       = None
-      RecordIndex = None
-      Timestamp   = DateTimeOffset.UtcNow
-      Message     = "test event" }
+[<Fact>]
+let ``ExecutionContext default starts with no events`` () =
+    let ctx = ExecutionContext.``default`` ()
+    Assert.Empty(ctx.ReadEvents())
+
+[<Fact>]
+let ``ExecutionContext Emit adds an event that ReadEvents returns`` () =
+    let ctx = ExecutionContext.``default`` ()
+    let event = makeEvent Warning (Custom("ping", Map.empty))
+    ctx.Emit(event)
+    let events = ctx.ReadEvents()
+    Assert.Single(events) |> ignore
+    Assert.Equal(Warning, events[0].Severity)
+
+[<Fact>]
+let ``ExecutionContext Emit accumulates multiple events in order`` () =
+    let ctx = ExecutionContext.``default`` ()
+    ctx.Emit(makeEvent Info    (Custom("a", Map.empty)))
+    ctx.Emit(makeEvent Warning (Custom("b", Map.empty)))
+    ctx.Emit(makeEvent Error   (Custom("c", Map.empty)))
+    let events = ctx.ReadEvents()
+    Assert.Equal(3, events.Length)
+    Assert.Equal<Severity list>([Info; Warning; Error], events |> List.map _.Severity)
+
+// ---------------------------------------------------------------------------
+// Flow.validate
+// ---------------------------------------------------------------------------
+
+let positiveValidator (x: int) : Result<int, ErrorKind> =
+    if x > 0 then Ok x
+    else Result.Error (ValidationError("value", "must be positive"))
+
+[<Fact>]
+let ``Flow validate passes all valid items through unchanged`` () = task {
+    let ctx = ExecutionContext.``default`` ()
+    let flow = Flow.validate "stage" ctx positiveValidator
+    let input = taskSeq { yield 1; yield 2; yield 3 }
+
+    let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+    Assert.Equal<int list>([1; 2; 3], result)
+}
+
+[<Fact>]
+let ``Flow validate filters out invalid items`` () = task {
+    let ctx = ExecutionContext.``default`` ()
+    let flow = Flow.validate "stage" ctx positiveValidator
+    let input = taskSeq { yield -1; yield 2; yield -3; yield 4 }
+
+    let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+    Assert.Equal<int list>([2; 4], result)
+}
+
+[<Fact>]
+let ``Flow validate emits one Error event per rejected item`` () = task {
+    let ctx = ExecutionContext.``default`` ()
+    let flow = Flow.validate "validate-age" ctx positiveValidator
+    let input = taskSeq { yield -1; yield 2; yield -3 }
+
+    let! _ = flow.Transform(input) |> TaskSeq.toListAsync
+    let events = ctx.ReadEvents()
+
+    Assert.Equal(2, events.Length)
+    Assert.All(events, fun e -> Assert.Equal(Severity.Error, e.Severity))
+    Assert.All(events, fun e -> Assert.Equal(Some "validate-age", e.Stage))
+}
+
+[<Fact>]
+let ``Flow validate emits correct RecordIndex for each rejected item`` () = task {
+    let ctx = ExecutionContext.``default`` ()
+    let flow = Flow.validate "stage" ctx positiveValidator
+    // indices:         0   1   2
+    let input = taskSeq { yield -1; yield 2; yield -3 }
+
+    let! _ = flow.Transform(input) |> TaskSeq.toListAsync
+    let events = ctx.ReadEvents()
+
+    Assert.Equal(2, events.Length)
+    Assert.Equal(Some 0L, events[0].RecordIndex)
+    Assert.Equal(Some 2L, events[1].RecordIndex)
+}
+
+[<Fact>]
+let ``Flow validate on empty stream emits no events`` () = task {
+    let ctx = ExecutionContext.``default`` ()
+    let flow = Flow.validate "stage" ctx positiveValidator
+
+    let! _ = flow.Transform(TaskSeq.empty) |> TaskSeq.toListAsync
+
+    Assert.Empty(ctx.ReadEvents())
+}
+
+[<Fact>]
+let ``Flow validate with all-invalid stream yields empty output`` () = task {
+    let ctx = ExecutionContext.``default`` ()
+    let flow = Flow.validate "stage" ctx positiveValidator
+    let input = taskSeq { yield -1; yield -2; yield -3 }
+
+    let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+    Assert.Empty(result)
+    Assert.Equal(3, ctx.ReadEvents().Length)
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline.runWithContext
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``Pipeline runWithContext returns correct RecordsRead when all pass`` () = task {
+    let ctx = ExecutionContext.``default`` ()
+    let source : Source<int> = { Read = fun () -> taskSeq { yield 1; yield 2; yield 3 } }
+    let flow = Flow.map id
+    let sink, _ = collectSink<int>()
+
+    let! result = Pipeline.runWithContext ctx source flow sink
+
+    Assert.Equal(3L, result.RecordsRead)
+    Assert.Equal(3L, result.RecordsAccepted)
+    Assert.Equal(0L, result.RecordsRejected)
+    Assert.Equal(0L, result.RecordsFailed)
+}
+
+[<Fact>]
+let ``Pipeline runWithContext captures validation rejections in PipelineResult`` () = task {
+    let ctx = ExecutionContext.``default`` ()
+    let source : Source<int> = { Read = fun () -> taskSeq { yield -1; yield 2; yield -3; yield 4 } }
+    let flow = Flow.validate "stage" ctx positiveValidator
+    let sink, collected = collectSink<int>()
+
+    let! result = Pipeline.runWithContext ctx source flow sink
+
+    Assert.Equal(4L, result.RecordsRead)
+    Assert.Equal(2L, result.RecordsRejected)
+    Assert.Equal(2L, result.RecordsAccepted)
+    Assert.Equal(0L, result.RecordsFailed)
+    Assert.Equal<int list>([2; 4], List.ofSeq collected)
+}
+
+[<Fact>]
+let ``Pipeline runWithContext records a non-negative Duration`` () = task {
+    let ctx = ExecutionContext.``default`` ()
+    let source : Source<int> = { Read = fun () -> TaskSeq.empty }
+    let flow = Flow.map id
+    let sink, _ = collectSink<int>()
+
+    let! result = Pipeline.runWithContext ctx source flow sink
+
+    Assert.True(result.Duration >= TimeSpan.Zero)
+}
+
+[<Fact>]
+let ``Pipeline runWithContext with empty source returns zero counts`` () = task {
+    let ctx = ExecutionContext.``default`` ()
+    let source : Source<int> = { Read = fun () -> TaskSeq.empty }
+    let flow = Flow.map id
+    let sink, _ = collectSink<int>()
+
+    let! result = Pipeline.runWithContext ctx source flow sink
+
+    Assert.Equal(0L, result.RecordsRead)
+    Assert.Equal(0L, result.RecordsAccepted)
+}
+
+// ---------------------------------------------------------------------------
+// Cancellation
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``Flow validate throws OperationCanceledException for already-cancelled token`` () = task {
+    use cts = new System.Threading.CancellationTokenSource()
+    cts.Cancel()
+    let ctx   = ExecutionContext.create cts.Token 1000
+    let flow  = Flow.validate "stage" ctx positiveValidator
+    let input = taskSeq { yield 1; yield 2; yield 3 }
+
+    let mutable threw = false
+    try
+        let! _ = flow.Transform(input) |> TaskSeq.toListAsync
+        ()
+    with :? System.OperationCanceledException ->
+        threw <- true
+
+    Assert.True(threw)
+}
+
+[<Fact>]
+let ``Pipeline runWithContext throws OperationCanceledException for already-cancelled token`` () = task {
+    use cts = new System.Threading.CancellationTokenSource()
+    cts.Cancel()
+    let ctx    = ExecutionContext.create cts.Token 1000
+    let source : Source<int> = { Read = fun () -> taskSeq { yield 1; yield 2; yield 3 } }
+    let flow   = Flow.map id
+    let sink, _ = collectSink<int>()
+
+    let mutable threw = false
+    try
+        let! _ = Pipeline.runWithContext ctx source flow sink
+        ()
+    with :? System.OperationCanceledException ->
+        threw <- true
+
+    Assert.True(threw)
+}
+
+// ---------------------------------------------------------------------------
+// Flow.enrich
+// ---------------------------------------------------------------------------
+
+let addLabelEnricher (x: int) : Result<string, ErrorKind> =
+    if x > 0 then Ok $"item-{x}"
+    else Result.Error (ValidationError("value", "must be positive to label"))
+
+[<Fact>]
+let ``Flow enrich passes all successfully enriched items through`` () = task {
+    let ctx   = ExecutionContext.``default`` ()
+    let flow  = Flow.enrich "stage" ctx addLabelEnricher
+    let input = taskSeq { yield 1; yield 2; yield 3 }
+
+    let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+    Assert.Equal<string list>(["item-1"; "item-2"; "item-3"], result)
+}
+
+[<Fact>]
+let ``Flow enrich can change the item type`` () = task {
+    let ctx      = ExecutionContext.``default`` ()
+    let toLength = fun (s: string) -> Ok s.Length
+    let flow     = Flow.enrich "stage" ctx toLength
+    let input    = taskSeq { yield "ab"; yield "cde"; yield "f" }
+
+    let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+    Assert.Equal<int list>([2; 3; 1], result)
+}
+
+[<Fact>]
+let ``Flow enrich drops items where enrichment fails`` () = task {
+    let ctx   = ExecutionContext.``default`` ()
+    let flow  = Flow.enrich "stage" ctx addLabelEnricher
+    let input = taskSeq { yield -1; yield 2; yield -3; yield 4 }
+
+    let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+    Assert.Equal<string list>(["item-2"; "item-4"], result)
+}
+
+[<Fact>]
+let ``Flow enrich emits one Error event per failed enrichment`` () = task {
+    let ctx   = ExecutionContext.``default`` ()
+    let flow  = Flow.enrich "enrich-label" ctx addLabelEnricher
+    let input = taskSeq { yield -1; yield 2; yield -3 }
+
+    let! _ = flow.Transform(input) |> TaskSeq.toListAsync
+    let events = ctx.ReadEvents()
+
+    Assert.Equal(2, events.Length)
+    Assert.All(events, fun e -> Assert.Equal(Severity.Error, e.Severity))
+    Assert.All(events, fun e -> Assert.Equal(Some "enrich-label", e.Stage))
+}
+
+[<Fact>]
+let ``Flow enrich emits correct RecordIndex for each failed item`` () = task {
+    let ctx   = ExecutionContext.``default`` ()
+    let flow  = Flow.enrich "stage" ctx addLabelEnricher
+    // indices:         0   1   2
+    let input = taskSeq { yield -1; yield 2; yield -3 }
+
+    let! _ = flow.Transform(input) |> TaskSeq.toListAsync
+    let events = ctx.ReadEvents()
+
+    Assert.Equal(2, events.Length)
+    Assert.Equal(Some 0L, events[0].RecordIndex)
+    Assert.Equal(Some 2L, events[1].RecordIndex)
+}
+
+[<Fact>]
+let ``Flow enrich on empty stream emits no events`` () = task {
+    let ctx  = ExecutionContext.``default`` ()
+    let flow = Flow.enrich "stage" ctx addLabelEnricher
+
+    let! _ = flow.Transform(TaskSeq.empty) |> TaskSeq.toListAsync
+
+    Assert.Empty(ctx.ReadEvents())
+}
+
+[<Fact>]
+let ``Flow enrich with all-failing stream yields empty output`` () = task {
+    let ctx   = ExecutionContext.``default`` ()
+    let flow  = Flow.enrich "stage" ctx addLabelEnricher
+    let input = taskSeq { yield -1; yield -2; yield -3 }
+
+    let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+    Assert.Empty(result)
+    Assert.Equal(3, ctx.ReadEvents().Length)
+}
+
+[<Fact>]
+let ``Flow enrich throws OperationCanceledException for already-cancelled token`` () = task {
+    use cts  = new System.Threading.CancellationTokenSource()
+    cts.Cancel()
+    let ctx   = ExecutionContext.create cts.Token 1000
+    let flow  = Flow.enrich "stage" ctx addLabelEnricher
+    let input = taskSeq { yield 1; yield 2; yield 3 }
+
+    let mutable threw = false
+    try
+        let! _ = flow.Transform(input) |> TaskSeq.toListAsync
+        ()
+    with :? System.OperationCanceledException ->
+        threw <- true
+
+    Assert.True(threw)
+}
+
+
 
 [<Fact>]
 let ``DiagnosticEvent can be constructed for each Severity`` () =
@@ -189,7 +508,7 @@ let ``DiagnosticEvent can be constructed for each Severity`` () =
 
 [<Fact>]
 let ``ErrorKind cases are all pattern-matchable`` () =
-    let exn = System.Exception("boom")
+    let exn = Exception("boom")
     let kinds = [
         SystemError exn
         IoError("/some/path", exn)
@@ -249,7 +568,7 @@ let ``PipelineResult fromEvents computes counts from event list`` () =
     let events = [
         makeEvent Error  (ValidationError("Age", "negative"))      // rejected
         makeEvent Error  (ValidationError("Name", "empty"))        // rejected
-        makeEvent Fatal  (SystemError(System.Exception("disk")))   // failed
+        makeEvent Fatal  (SystemError(Exception("disk")))   // failed
         makeEvent Warning (Custom("coerced", Map.empty))           // warning — not a rejection
     ]
     let result = PipelineResult.fromEvents 10L (TimeSpan.FromSeconds 1.0) events

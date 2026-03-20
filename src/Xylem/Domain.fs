@@ -6,21 +6,36 @@ open System.Threading.Tasks
 
 module Domain =
 
-    /// Produces a stream of records of type 'T.
-    /// Calling Read () starts a fresh, independent stream each time.
+    /// <summary>
+    /// Produces a stream of records of type <c>'T</c>.
+    /// Calling <c>Read ()</c> starts a fresh, independent stream each time.
+    /// </summary>
     type Source<'T> = {
+        /// <summary>
+        /// Starts a fresh, independent stream of records of type <c>'T</c>.
+        /// </summary>
         Read: unit -> IAsyncEnumerable<'T>
     }
 
-    /// Consumes a stream of records of type 'T.
+    /// <summary>
+    /// Consumes a stream of records of type <c>'T</c>.
     /// The sink owns iteration, allowing bulk operations and internal buffering.
+    /// </summary>
     type Sink<'T> = {
+        /// <summary>
+        /// Consumes a stream of records of type <c>'T</c> and performs the sink operation.
+        /// </summary>
         Write: IAsyncEnumerable<'T> -> Task<unit>
     }
 
-    /// Transforms a stream of 'TIn records into a stream of 'TOut records.
+    /// <summary>
+    /// Transforms a stream of <c>'TIn</c> records into a stream of <c>'TOut</c> records.
     /// The transform is lazy — no work happens until the stream is consumed.
+    /// </summary>
     type Flow<'TIn, 'TOut> = {
+        /// <summary>
+        /// Applies the underlying transform from <c>'TIn</c> to <c>'TOut</c>.
+        /// </summary>
         Transform: IAsyncEnumerable<'TIn> -> IAsyncEnumerable<'TOut>
     }
 
@@ -28,47 +43,159 @@ module Domain =
     // Diagnostics
     // -----------------------------------------------------------------------
 
+    /// <summary>
     /// How severe a diagnostic event is.
+    /// </summary>
     type Severity =
-        | Info      // Something noteworthy; pipeline is healthy
-        | Warning   // Unexpected but recoverable; pipeline continues
-        | Error     // A record could not be processed; it is rejected
-        | Fatal     // Pipeline cannot continue; execution is aborted
+        /// <summary>
+        /// Something noteworthy; the pipeline is healthy.
+        /// </summary>
+        | Info
+        /// <summary>
+        /// Unexpected but recoverable; the pipeline continues.
+        /// </summary>
+        | Warning
+        /// <summary>
+        /// A record could not be processed and is rejected.
+        /// </summary>
+        | Error
+        /// <summary>
+        /// Pipeline cannot continue; execution is aborted.
+        /// </summary>
+        | Fatal
 
+    /// <summary>
     /// What went wrong — machine-readable and pattern-matchable.
-    /// Use Custom for domain-specific kinds without modifying the library.
+    /// Use <c>Custom</c> for domain-specific kinds without modifying the library.
     /// Note: adding a new well-known case is a breaking change by design,
     /// forcing callers to explicitly handle it.
+    /// </summary>
     type ErrorKind =
+        /// <summary>
+        /// System-level error (e.g., exception).
+        /// </summary>
         | SystemError           of exn
+        /// <summary>
+        /// IO error with the provided path and inner exception.
+        /// </summary>
         | IoError               of path: string * exn
+        /// <summary>
+        /// Validation error for a specific field and reason.
+        /// </summary>
         | ValidationError       of field: string * reason: string
+        /// <summary>
+        /// Business rule violation with rule and reason.
+        /// </summary>
         | BusinessRuleViolation of rule: string * reason: string
+        /// <summary>
+        /// Pipeline error associated with a stage and exception.
+        /// </summary>
         | PipelineError         of stage: string * exn
+        /// <summary>
+        /// Custom error with tag and data payload.
+        /// </summary>
         | Custom                of tag: string * data: Map<string, string>
 
+    /// <summary>
     /// A single structured event emitted during a pipeline run.
+    /// </summary>
     type DiagnosticEvent = {
+        /// <summary>
+        /// How severe the event is.
+        /// </summary>
         Severity:    Severity
+        /// <summary>
+        /// What kind of error or event occurred.
+        /// </summary>
         Kind:        ErrorKind
+        /// <summary>
         /// The flow or stage that emitted this event, if applicable.
+        /// </summary>
         Stage:       string option
+        /// <summary>
         /// 0-based index of the record that triggered this event, if applicable.
+        /// </summary>
         RecordIndex: int64 option
+        /// <summary>
+        /// When the event occurred.
+        /// </summary>
         Timestamp:   DateTimeOffset
+        /// <summary>
         /// Human-readable summary of the event.
+        /// </summary>
         Message:     string
     }
 
+    /// <summary>
+    /// Coordinates a single pipeline run: configuration, cancellation, and diagnostic emission.
+    /// Create via <c>ExecutionContext.create</c> or <c>ExecutionContext.default</c>.
+    /// </summary>
+    type ExecutionContext = {
+        /// <summary>Signals cooperative cancellation to the pipeline.</summary>
+        CancellationToken: System.Threading.CancellationToken
+        /// <summary>Preferred number of records per batch for batch-aware sinks and flows.</summary>
+        BatchSize:         int
+        /// <summary>
+        /// Emits a structured diagnostic event for the current run.
+        /// Called by flows that reject or warn about individual records.
+        /// </summary>
+        Emit:              DiagnosticEvent -> unit
+        /// <summary>Returns all events emitted so far in this run, in emission order.</summary>
+        ReadEvents:        unit -> DiagnosticEvent list
+    }
+
+    /// <summary>
     /// The structured outcome of a completed pipeline run.
+    /// </summary>
     type PipelineResult = {
+        /// <summary>
+        /// Number of records read from the source.
+        /// </summary>
         RecordsRead:     int64
+        /// <summary>
+        /// Number of records accepted by the pipeline.
+        /// </summary>
         RecordsAccepted: int64
+        /// <summary>
+        /// Number of records rejected by the pipeline.
+        /// </summary>
         RecordsRejected: int64
+        /// <summary>
+        /// Number of records that failed fatally.
+        /// </summary>
         RecordsFailed:   int64
+        /// <summary>
+        /// Total duration of the pipeline run.
+        /// </summary>
         Duration:        TimeSpan
+        /// <summary>
+        /// List of diagnostic events emitted during the run.
+        /// </summary>
         Events:          DiagnosticEvent list
     }
+
+module ExecutionContext =
+
+    open Domain
+
+    /// <summary>
+    /// Creates a new <c>ExecutionContext</c> for a single pipeline run.
+    /// All events emitted via <c>Emit</c> are readable via <c>ReadEvents</c>.
+    /// </summary>
+    let create (token: System.Threading.CancellationToken) (batchSize: int) : ExecutionContext =
+        let events = ResizeArray<DiagnosticEvent>()
+        { CancellationToken = token
+          BatchSize         = batchSize
+          // NOTE: This `Emit` is currently not thread-safe.
+          Emit              = fun e -> events.Add(e)
+          ReadEvents        = fun () -> List.ofSeq events }
+
+    /// <summary>
+    /// Creates an <c>ExecutionContext</c> with <c>CancellationToken.None</c> and
+    /// a batch size of 1 000 — suitable for tests and simple one-off runs.
+    /// </summary>
+    let ``default`` () =
+        create System.Threading.CancellationToken.None 1_000
 
 module PipelineResult =
 
@@ -83,8 +210,10 @@ module PipelineResult =
         Events          = []
     }
 
+    /// <summary>
     /// Builds a PipelineResult by folding over a list of diagnostic events.
-    /// RecordsAccepted is derived as: read - rejected - failed.
+    /// The value of RecordsAccepted is defined as: read - rejected - failed.
+    /// </summary>
     let fromEvents (recordsRead: int64) (duration: TimeSpan) (events: DiagnosticEvent list) =
         let rejected = events |> List.filter (fun e -> e.Severity = Error) |> List.length |> int64
         let failed   = events |> List.filter (fun e -> e.Severity = Fatal) |> List.length |> int64
@@ -100,33 +229,139 @@ module Flow =
     open Domain
     open FSharp.Control
 
-    /// Creates a Flow that applies a mapping function to every item.
+    /// <summary>
+    /// Creates a <c>Flow</c> that applies a mapping function to every item.
+    /// </summary>
     let map (f: 'TIn -> 'TOut) : Flow<'TIn, 'TOut> = {
         Transform = TaskSeq.map f
     }
 
-    /// Creates a Flow that keeps only items matching the predicate.
+    /// <summary>
+    /// Creates a <c>Flow</c> that keeps only items matching the predicate.
+    /// </summary>
     let filter (predicate: 'T -> bool) : Flow<'T, 'T> = {
         Transform = TaskSeq.filter predicate
     }
 
-    /// Composes two flows left-to-right: output of f1 becomes input of f2.
+    /// <summary>
+    /// Composes two flows left-to-right: output of <c>f1</c> becomes input of <c>f2</c>.
+    /// </summary>
     let compose (f1: Flow<'T1, 'T2>) (f2: Flow<'T2, 'T3>) : Flow<'T1, 'T3> = {
         Transform = f1.Transform >> f2.Transform
     }
 
-    /// Operator alias for compose — mirrors F# function composition style.
+    /// <summary>
+    /// Operator alias for <c>compose</c> — mirrors F# function composition style.
+    /// </summary>
     let (>>>) f1 f2 = compose f1 f2
+
+    /// <summary>
+    /// Creates a <c>Flow</c> that validates every item using <c>validator</c>.
+    /// Items for which <c>validator</c> returns <c>Ok</c> are passed downstream unchanged.
+    /// Items for which it returns <c>Error</c> are dropped, and a <c>DiagnosticEvent</c>
+    /// of severity <c>Error</c> is emitted via <c>ctx</c>, recording the stage name,
+    /// 0-based stream index, and the <c>ErrorKind</c> returned by the validator.
+    /// </summary>
+    let validate (stageName: string) (ctx: ExecutionContext) (validator: 'T -> Result<'T, ErrorKind>) : Flow<'T, 'T> =
+        { Transform = fun stream ->
+            // Mutable `index` works because `taskSeq` iterates sequentially.
+            let mutable index = 0L
+            taskSeq {
+                for item in stream do
+                    ctx.CancellationToken.ThrowIfCancellationRequested()
+                    match validator item with
+                    | Result.Ok accepted ->
+                        index <- index + 1L
+                        yield accepted
+                    | Result.Error kind ->
+                        ctx.Emit {
+                            Severity    = Severity.Error
+                            Kind        = kind
+                            Stage       = Some stageName
+                            RecordIndex = Some index
+                            Timestamp   = DateTimeOffset.UtcNow
+                            Message     = $"Record at index {index} rejected by '{stageName}'"
+                        }
+                        index <- index + 1L
+            } }
+
+    /// <summary>
+    /// Creates a <c>Flow</c> that enriches every item using <c>enricher</c>.
+    /// Items for which <c>enricher</c> returns <c>Ok</c> are passed downstream
+    /// as the (potentially type-changed) enriched value.
+    /// Items for which it returns <c>Error</c> are dropped, and a
+    /// <c>DiagnosticEvent</c> of severity <c>Error</c> is emitted via <c>ctx</c>,
+    /// recording the stage name, 0-based stream index, and the <c>ErrorKind</c>
+    /// returned by the enricher.
+    /// Unlike <c>validate</c>, the enricher may change the record type from
+    /// <c>'T</c> to <c>'TOut</c> — useful for lookups, projections, and joins.
+    /// </summary>
+    let enrich (stageName: string) (ctx: ExecutionContext) (enricher: 'T -> Result<'TOut, ErrorKind>) : Flow<'T, 'TOut> =
+        { Transform = fun stream ->
+            let mutable index = 0L
+            taskSeq {
+                for item in stream do
+                    ctx.CancellationToken.ThrowIfCancellationRequested()
+                    match enricher item with
+                    | Result.Ok enriched ->
+                        index <- index + 1L
+                        yield enriched
+                    | Result.Error kind ->
+                        ctx.Emit {
+                            Severity    = Severity.Error
+                            Kind        = kind
+                            Stage       = Some stageName
+                            RecordIndex = Some index
+                            Timestamp   = DateTimeOffset.UtcNow
+                            Message     = $"Record at index {index} could not be enriched by '{stageName}'"
+                        }
+                        index <- index + 1L
+            } }
 
 module Pipeline =
 
     open Domain
+    open FSharp.Control
 
-    /// Connects a Source directly to a Sink.
+    /// <summary>
+    /// Connects a <c>Source</c> directly to a <c>Sink</c>.
+    /// </summary>
     let run (source: Source<'T>) (sink: Sink<'T>) : Task<unit> =
         sink.Write(source.Read())
 
-    /// Connects a Source to a Sink, transforming records through a Flow.
+    /// <summary>
+    /// Connects a <c>Source</c> to a <c>Sink</c>, transforming records through a <c>Flow</c>.
+    /// </summary>
     let runWith (source: Source<'TIn>) (flow: Flow<'TIn, 'TOut>) (sink: Sink<'TOut>) : Task<unit> =
         sink.Write(flow.Transform(source.Read()))
 
+    /// <summary>
+    /// Runs a pipeline under an <c>ExecutionContext</c> and returns a structured
+    /// <c>PipelineResult</c>. Counts every record emitted by the source, measures
+    /// wall-clock duration, and collects all diagnostic events from <c>ctx</c>.
+    /// </summary>
+    let runWithContext
+            (ctx:    ExecutionContext)
+            (source: Source<'TIn>)
+            (flow:   Flow<'TIn, 'TOut>)
+            (sink:   Sink<'TOut>)
+            : Task<PipelineResult> =
+        task {
+            ctx.CancellationToken.ThrowIfCancellationRequested()
+            let sw      = System.Diagnostics.Stopwatch.StartNew()
+            // TODO: maybe use mutable instead of ref?
+            let count   = ref 0L
+
+            let countingSource : Source<'TIn> = {
+                Read = fun () ->
+                    source.Read()
+                    |> TaskSeq.map (fun item ->
+                        count.Value <- count.Value + 1L
+                        item)
+            }
+
+            do! runWith countingSource flow sink
+            sw.Stop()
+
+            return PipelineResult.fromEvents count.Value sw.Elapsed (ctx.ReadEvents())
+        }

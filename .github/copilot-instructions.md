@@ -6,3 +6,5 @@
 * Offer insight, alternatives, suggestions
 * Explain the trade-offs on design choices
 * Test driven development
+* If you add comments then please wrap them as XML comments: `<summary>` ... `</summary>`
+* Ask permission to modify existing code or comments.
