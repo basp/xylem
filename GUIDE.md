@@ -4,21 +4,21 @@
 
 ---
 
-## `Source<'T>`
+## `Root<'T>`
 
-A `Source<'T>` is the **entry point** of any Xylem pipeline. It produces a
+A `Root<'T>` is the **entry point** of any Xylem pipeline. It produces a
 stream of records of type `'T` as an `IAsyncEnumerable<'T>`.
 
 ### Type definition
 
 ```fsharp
-type Source<'T> = {
+type Root<'T> = {
     Read: unit -> IAsyncEnumerable<'T>
 }
 ```
 
-The `Read` field is a function so that a source can be re-executed —
-calling `Read ()` starts a fresh stream each time. The source itself is
+The `Read` field is a function so that a root can be re-executed —
+calling `Read ()` starts a fresh stream each time. The root itself is
 an immutable record; any state (e.g. a database cursor) lives *inside*
 the closure returned by `Read`.
 
@@ -32,7 +32,7 @@ the closure returned by `Read`.
 - **Unbounded sources** — databases, files, queues, and live event
   streams all model cleanly as async sequences.
 
-### Creating a source
+### Creating a root
 
 Use the `taskSeq { }` computation expression from
 `FSharp.Control.TaskSeq` to produce values:
@@ -40,7 +40,7 @@ Use the `taskSeq { }` computation expression from
 ```fsharp
 open FSharp.Control
 
-let numbersSource : Source<int> = {
+let numbersRoot : Root<int> = {
     Read = fun () ->
         taskSeq {
             yield 1
@@ -50,34 +50,34 @@ let numbersSource : Source<int> = {
 }
 ```
 
-### Consuming a source in tests
+### Consuming a root in tests
 
 Use `TaskSeq.toListAsync` to materialize the stream into a plain list:
 
 ```fsharp
-let items = numbersSource.Read() |> TaskSeq.toListAsync |> Async.AwaitTask |> Async.RunSynchronously
+let items = numbersRoot.Read() |> TaskSeq.toListAsync |> Async.AwaitTask |> Async.RunSynchronously
 // items = [1; 2; 3]
 ```
 
 Or with `task { }`:
 
 ```fsharp
-let! items = numbersSource.Read() |> TaskSeq.toListAsync
+let! items = numbersRoot.Read() |> TaskSeq.toListAsync
 // items = [1; 2; 3]
 ```
 
 ---
 
-## `Sink<'T>`
+## `Leaf<'T>`
 
-A `Sink<'T>` is the **exit point** of a pipeline. It consumes an
+A `Leaf<'T>` is the **exit point** of a pipeline. It consumes an
 `IAsyncEnumerable<'T>` stream and returns `Task<unit>` once all records
 have been processed.
 
 ### Type definition
 
 ```fsharp
-type Sink<'T> = {
+type Leaf<'T> = {
     Write: IAsyncEnumerable<'T> -> Task<unit>
 }
 ```
@@ -95,7 +95,7 @@ own iteration strategy:
 An item-by-item `Write: 'T -> Task<unit>` interface would force the
 pipeline engine to drive iteration, removing that flexibility.
 
-### Creating a sink
+### Creating a leaf
 
 The simplest sink is an in-memory collector — useful in tests:
 
@@ -105,111 +105,111 @@ open FSharp.Control
 
 let collectSink () =
     let collected = List<'T>()
-    let sink : Sink<'T> = {
+    let leaf : Leaf<'T> = {
         Write = fun stream -> task {
             do! stream |> TaskSeq.iter (fun item -> collected.Add(item))
         }
     }
-    sink, collected
+    leaf, collected
 ```
 
-### Connecting a source to a sink
+### Connecting a root to a leaf
 
-Use `Pipeline.run` to wire a `Source` to a `Sink`:
+Use `Pipeline.run` to wire a `Root` to a `Leaf`:
 
 ```fsharp
-do! Pipeline.run source sink
+do! Pipeline.run root leaf
 ```
 
-`Pipeline.run` simply passes the source stream to the sink's `Write`
+`Pipeline.run` simply passes the root stream to the leaf's `Write`
 function:
 
 ```fsharp
-let run (source: Source<'T>) (sink: Sink<'T>) : Task<unit> =
-    sink.Write(source.Read())
+let run (root: Root<'T>) (leaf: Leaf<'T>) : Task<unit> =
+    leaf.Write(root.Read())
 ```
 
 ---
 
-## `Flow<'TIn,'TOut>`
+## `Vessel<'TIn,'TOut>`
 
-A `Flow<'TIn,'TOut>` sits **between** a `Source` and a `Sink`. It
+A `Vessel<'TIn,'TOut>` sits **between** a `Root` and a `Leaf`. It
 transforms an `IAsyncEnumerable<'TIn>` into an
 `IAsyncEnumerable<'TOut>` — lazily, without materializing the stream.
 
 ### Type definition
 
 ```fsharp
-type Flow<'TIn, 'TOut> = {
+type Vessel<'TIn, 'TOut> = {
     Transform: IAsyncEnumerable<'TIn> -> IAsyncEnumerable<'TOut>
 }
 ```
 
-> **Flow vs Pipeline:** A `Flow` defines *what* transformation to apply
+> **Vessel vs Pipeline:** A `Vessel` defines *what* transformation to apply
 > — it is a reusable, composable value. The `Pipeline` module defines
-> *how* to execute a complete `Source` → `Flow` → `Sink` chain. Think of a
-> `Flow` as a recipe and `Pipeline.runWithContext` as the kitchen that
+> *how* to execute a complete `Root` → `Vessel` → `Leaf` chain. Think of a
+> `Vessel` as a recipe and `Pipeline.runWithContext` as the kitchen that
 > runs it.
 
 ### Why a stream-to-stream function?
 
-Passing the whole stream (rather than item-by-item) gives the flow full
+Passing the whole stream (rather than item-by-item) gives the vessel full
 control over its iteration strategy:
 
-- A **map** flow transforms each item individually.
-- A **filter** flow skips items that don't match a predicate.
-- A **batch** flow can group items into chunks before emitting.
-- A **window** flow (future) can look ahead or behind.
+- A **map** vessel transforms each item individually.
+- A **filter** vessel skips items that don't match a predicate.
+- A **batch** vessel can group items into chunks before emitting.
+- A **window** vessel (future) can look ahead or behind.
 
 All of these are impossible with an item-by-item `'TIn -> 'TOut`
 signature.
 
-### Built-in flow combinators
+### Built-in vessel combinators
 
 ```fsharp
 // Transform every item
-let doubled : Flow<int, int> = Flow.map (fun x -> x * 2)
+let doubled : Vessel<int, int> = Vessel.map (fun x -> x * 2)
 
 // Keep only matching items
-let evens : Flow<int, int> = Flow.filter (fun x -> x % 2 = 0)
+let evens : Vessel<int, int> = Vessel.filter (fun x -> x % 2 = 0)
 
 // Group items into arrays of at most N
-let inPairsOf3 : Flow<int, int[]> = Flow.batch 3
+let inPairsOf3 : Vessel<int, int[]> = Vessel.batch 3
 ```
 
-### Composing flows
+### Composing vessels
 
-Two flows can be composed into one with `Flow.compose` (or the `>>>` operator):
+Two vessels can be composed into one with `Vessel.compose` (or the `>>>` operator):
 
 ```fsharp
-let doubledEvens : Flow<int, int> =
-    Flow.map (fun x -> x * 2) >>> Flow.filter (fun x -> x % 2 = 0)
+let doubledEvens : Vessel<int, int> =
+    Vessel.map (fun x -> x * 2) >>> Vessel.filter (fun x -> x % 2 = 0)
 ```
 
 Composition is lazy — no work happens until the stream is consumed.
 
-> **Operator scope:** `>>>` is defined inside `module Flow` and is
+> **Operator scope:** `>>>` is defined inside `module Vessel` and is
 > available when that module is open. When calling from a context where
-> the module is not open, use `Flow.compose` directly:
+> the module is not open, use `Vessel.compose` directly:
 >
 > ```fsharp
-> let flow = Flow.compose (Flow.map (fun x -> x * 2)) (Flow.filter (fun x -> x % 2 = 0))
+> let vessel = Vessel.compose (Vessel.map (fun x -> x * 2)) (Vessel.filter (fun x -> x % 2 = 0))
 > ```
 
-### Connecting source, flow, and sink
+### Connecting root, vessel, and leaf
 
 Use `Pipeline.runWith` to wire all three together:
 
 ```fsharp
-do! Pipeline.runWith source flow sink
+do! Pipeline.runWith root vessel leaf
 ```
 
-`Pipeline.runWith` threads the stream through the flow before handing
-it to the sink:
+`Pipeline.runWith` threads the stream through the vessel before handing
+it to the leaf:
 
 ```fsharp
-let runWith (source: Source<'TIn>) (flow: Flow<'TIn,'TOut>) (sink: Sink<'TOut>) : Task<unit> =
-    sink.Write(flow.Transform(source.Read()))
+let runWith (root: Root<'TIn>) (vessel: Vessel<'TIn,'TOut>) (leaf: Leaf<'TOut>) : Task<unit> =
+    leaf.Write(vessel.Transform(root.Read()))
 ```
 
 ---
@@ -260,15 +260,15 @@ Exhaustive pattern matches will fail to compile, forcing every caller to
 explicitly handle the new category. `Custom` is the safety valve when
 you need a domain-specific kind without modifying the library.
 
-### `DiagnosticEvent`
+### `Pulse`
 
 A single structured event emitted during a pipeline run:
 
 ```fsharp
-type DiagnosticEvent = {
+type Pulse = {
     Severity:    Severity
     Kind:        ErrorKind
-    Stage:       string option        // which flow/stage emitted this
+    Stage:       string option        // which vessel/stage emitted this
     RecordIndex: int64 option         // 0-based record position, if applicable
     Timestamp:   DateTimeOffset
     Message:     string               // human-readable summary
@@ -279,18 +279,18 @@ type DiagnosticEvent = {
 tied to a specific stage or record (e.g. a file-open failure has no
 record index; a pre-flight config check has no stage).
 
-### `PipelineResult`
+### `Harvest`
 
 The structured outcome of a completed pipeline run:
 
 ```fsharp
-type PipelineResult = {
+type Harvest = {
     RecordsRead:     int64
     RecordsAccepted: int64
     RecordsRejected: int64
     RecordsFailed:   int64
     Duration:        TimeSpan
-    Events:          DiagnosticEvent list
+    Events:          Pulse list
 }
 ```
 
@@ -298,12 +298,12 @@ type PipelineResult = {
 conveniences — they are always consistent with `Events` and save callers
 from folding the list themselves.
 
-### `StageSummary`
+### `Ring`
 
 A per-stage aggregation of diagnostic event counts:
 
 ```fsharp
-type StageSummary = {
+type Ring = {
     Stage:        string option
     InfoCount:    int64
     WarningCount: int64
@@ -313,18 +313,18 @@ type StageSummary = {
 }
 ```
 
-`Stage` mirrors `DiagnosticEvent.Stage` — it is `Some "validate"` for
-events emitted by a named flow, or `None` for pipeline-level events such
+`Stage` mirrors `Pulse.Stage` — it is `Some "validate"` for
+events emitted by a named vessel, or `None` for pipeline-level events such
 as retry warnings or fatal exceptions caught by `runWithContext`.
 
 #### Producing summaries
 
-`PipelineResult.summarizeByStage` folds a `DiagnosticEvent list` into a
-`StageSummary list`:
+`Harvest.summarizeByStage` folds a `Pulse list` into a
+`Ring list`:
 
 ```fsharp
-let result = PipelineResult.fromEvents count duration (ctx.ReadEvents())
-let summaries = PipelineResult.summarizeByStage result.Events
+let result = Harvest.fromEvents count duration (ctx.ReadEvents())
+let summaries = Harvest.summarizeByStage result.Events
 ```
 
 The returned list preserves **first-occurrence order** — summaries
@@ -338,7 +338,7 @@ After a pipeline run, summaries answer questions like *"how many records
 did the validate stage reject?"* without scanning the raw event list:
 
 ```fsharp
-let summaries = PipelineResult.summarizeByStage result.Events
+let summaries = Harvest.summarizeByStage result.Events
 
 for s in summaries do
     let stage = s.Stage |> Option.defaultValue "(pipeline)"
@@ -347,23 +347,23 @@ for s in summaries do
 
 Events with `Stage = None` are grouped together — they typically contain
 retry diagnostics, fatal pipeline exceptions, or any other event not
-tied to a specific flow stage.
+tied to a specific vessel stage.
 
-### Design decisions — `StageSummary`
+### Design decisions — `Ring`
 
-#### Standalone function, not a `PipelineResult` field
+#### Standalone function, not a `Harvest` field
 
-`summarizeByStage` is a standalone function in the `PipelineResult`
-module rather than a pre-computed field on the `PipelineResult` record.
+`summarizeByStage` is a standalone function in the `Harvest`
+module rather than a pre-computed field on the `Harvest` record.
 
-The alternative — adding a `StageSummaries: StageSummary list` field to
-`PipelineResult` and populating it in `fromEvents` — was considered but
+The alternative — adding a `StageSummaries: Ring list` field to
+`Harvest` and populating it in `fromEvents` — was considered but
 rejected for several reasons:
 
 1. **Not every caller needs summaries.** Pre-computing them on every run
    adds allocation and computation that simple pipelines (or pipelines
    that only check top-level counts) would never use.
-2. **Record stability.** Adding a field to `PipelineResult` is a
+2. **Record stability.** Adding a field to `Harvest` is a
    breaking change for anyone pattern-matching or constructing the
    record directly. A new function in the module is additive.
 3. **Composability.** Callers can filter or transform the event list
@@ -378,15 +378,15 @@ flexibility gained.
 #### Grouping by `string option`, not a `Stage` type
 
 Stages are identified by their `string option` name, matching the
-`DiagnosticEvent.Stage` field. An alternative would be a dedicated
+`Pulse.Stage` field. An alternative would be a dedicated
 `Stage` type with richer metadata (ordering, parent pipeline, etc.).
 
 This was deferred because:
 
 1. The current model has no first-class `Stage` concept — stages are
-   just names passed to `Flow.validate`, `Flow.enrich`, etc.
+   just names passed to `Vessel.validate`, `Vessel.enrich`, etc.
 2. Introducing a `Stage` type would ripple through `ExecutionContext`,
-   flow combinators, and event construction — significant churn for
+   vessel combinators, and event construction — significant churn for
    marginal benefit at v1 scope.
 3. String names are simple, debuggable, and sufficient for grouping.
 
@@ -412,7 +412,7 @@ stages, but this adds complexity without a clear use case today.
 
 #### `int64` counts, not `int`
 
-Counts use `int64` to stay consistent with `PipelineResult.RecordsRead`
+Counts use `int64` to stay consistent with `Harvest.RecordsRead`
 and other counters. This avoids lossy conversions when comparing summary
 counts against pipeline-level totals, and future-proofs against large
 event volumes.
@@ -422,8 +422,8 @@ event volumes.
 ## `ExecutionContext`
 
 An `ExecutionContext` coordinates a single pipeline run. It carries
-everything a flow or combinator needs at runtime — without baking
-run-specific concerns into the `Flow` type itself.
+everything a vessel or combinator needs at runtime — without baking
+run-specific concerns into the `Vessel` type itself.
 
 ### Type definition
 
@@ -431,17 +431,17 @@ run-specific concerns into the `Flow` type itself.
 type ExecutionContext = {
     CancellationToken: System.Threading.CancellationToken
     BatchSize:         int
-    Emit:              DiagnosticEvent -> unit
-    ReadEvents:        unit -> DiagnosticEvent list
+    Emit:              Pulse -> unit
+    ReadEvents:        unit -> Pulse list
     RetryPolicy:       RetryPolicy
 }
 ```
 
 | Field | Purpose |
 |---|---|
-| `CancellationToken` | Signals cooperative cancellation; ctx-aware flows check it per item |
-| `BatchSize` | Preferred number of records per batch for batch-aware sinks and flows |
-| `Emit` | Records a `DiagnosticEvent` for the current run (thread-safe) |
+| `CancellationToken` | Signals cooperative cancellation; ctx-aware vessels check it per item |
+| `BatchSize` | Preferred number of records per batch for batch-aware sinks and vessels |
+| `Emit` | Records a `Pulse` for the current run (thread-safe) |
 | `ReadEvents` | Returns all events emitted so far, in emission order |
 | `RetryPolicy` | Controls retry behaviour on pipeline failure (default: `NoRetry`) |
 
@@ -465,22 +465,22 @@ threads continue emitting.
 
 ---
 
-## Context-aware flow combinators
+## Context-aware vessel combinators
 
-Pure flows (`map`, `filter`, `compose`) have no side effects and need no
+Pure vessels (`map`, `filter`, `compose`) have no side effects and need no
 context. Combinators that can *reject or fail records* receive an
 `ExecutionContext` at construction time so they can emit structured
-diagnostics without changing the `Flow` type.
+diagnostics without changing the `Vessel` type.
 
-### `Flow.validate`
+### `Vessel.validate`
 
 Validates every item; passes `Ok` items downstream unchanged and drops
-`Error` items, emitting one `DiagnosticEvent` of severity `Error` per
+`Error` items, emitting one `Pulse` of severity `Error` per
 rejection.
 
 ```fsharp
-let flow : Flow<int, int> =
-    Flow.validate "check-positive" ctx (fun x ->
+let vessel : Vessel<int, int> =
+    Vessel.validate "check-positive" ctx (fun x ->
         if x > 0 then Ok x
         else Result.Error (ValidationError("value", "must be positive")))
 ```
@@ -498,7 +498,7 @@ The combinator calls `CancellationToken.ThrowIfCancellationRequested()`
 at the start of each iteration, so an already-cancelled token stops the
 stream immediately.
 
-### `Flow.enrich`
+### `Vessel.enrich`
 
 Enriches every item using a function that may change the record type.
 `Ok` items are passed downstream as the enriched value; `Error` items
@@ -506,8 +506,8 @@ are dropped with an `Error` diagnostic — same pattern as `validate`.
 
 ```fsharp
 // int -> string enrichment (type changes)
-let flow : Flow<int, string> =
-    Flow.enrich "add-label" ctx (fun x ->
+let vessel : Vessel<int, string> =
+    Vessel.enrich "add-label" ctx (fun x ->
         if x > 0 then Ok $"item-{x}"
         else Result.Error (ValidationError("value", "must be positive")))
 ```
@@ -524,15 +524,15 @@ The enricher signature is `'T -> Result<'TOut, ErrorKind>`, making
 > the shape, only the record's worthiness is in question. Use `validate`
 > when you are checking; use `enrich` when you are transforming.
 
-### `Flow.batch`
+### `Vessel.batch`
 
-`Flow.batch` groups a stream of individual items into a stream of
+`Vessel.batch` groups a stream of individual items into a stream of
 fixed-size arrays. It is a pure structural transform — it needs no
 `ExecutionContext` and emits no diagnostics.
 
 ```fsharp
 // Groups items into arrays of at most 100
-let flow : Flow<Row, Row[]> = Flow.batch 100
+let vessel : Vessel<Row, Row[]> = Vessel.batch 100
 ```
 
 #### Behaviour
@@ -556,7 +556,7 @@ this purpose. Pass it directly to respect the pipeline's configured
 batch size:
 
 ```fsharp
-let flow = Flow.batch ctx.BatchSize
+let vessel = Vessel.batch ctx.BatchSize
 ```
 
 This keeps the batch size in one place — the context — rather than
@@ -566,7 +566,7 @@ hard-coding it at each call site.
 
 `batch` emits `'T[]` (array), not `'T list` or `seq<'T>`. Arrays are:
 
-- **Fixed-size** — the sink knows exactly how many records it received
+- **Fixed-size** — the leaf knows exactly how many records it received
 - **Contiguous** — optimal for bulk-insert APIs (SQL `SqlBulkCopy`,
   `IDataReader`, etc.)
 - **Efficient** — `ResizeArray` is used internally; `ToArray()` is a
@@ -575,25 +575,25 @@ hard-coding it at each call site.
 `'T list` would be equally safe but adds an allocation and a traversal
 for callers that need to hand the batch to a .NET API expecting an array.
 
-#### Composing `batch` with other flows
+#### Composing `batch` with other vessels
 
 Because the output type changes from `'T` to `'T[]`, `batch` is
-typically the **last** flow in a composed pipeline:
+typically the **last** vessel in a composed pipeline:
 
 ```fsharp
 // validate, then enrich, then group into batches for bulk insert
-let flow =
-    Flow.compose
-        (Flow.validate "check" ctx validator)
-        (Flow.compose
-            (Flow.enrich "enrich" ctx enricher)
-            (Flow.batch ctx.BatchSize))
+let vessel =
+    Vessel.compose
+        (Vessel.validate "check" ctx validator)
+        (Vessel.compose
+            (Vessel.enrich "enrich" ctx enricher)
+            (Vessel.batch ctx.BatchSize))
 ```
 
-A sink that processes `'T[]` directly handles the batch as a unit:
+A leaf that processes `'T[]` directly handles the batch as a unit:
 
 ```fsharp
-let bulkSink : Sink<Row[]> = {
+let bulkLeaf : Leaf<Row[]> = {
     Write = fun batches -> task {
         for batch in batches do
             do! db.BulkInsertAsync(batch)
@@ -606,13 +606,13 @@ let bulkSink : Sink<Row[]> = {
 ## Running a pipeline with context
 
 `Pipeline.runWithContext` is the full-featured runner. It wraps
-`runWith`, counts every record emitted by the source, measures
+`runWith`, counts every record emitted by the root, measures
 wall-clock duration, and collects all diagnostic events from `ctx`:
 
 ```fsharp
 let ctx = ExecutionContext.``default`` ()
 
-let! result : PipelineResult = Pipeline.runWithContext ctx source flow sink
+let! result : Harvest = Pipeline.runWithContext ctx root vessel leaf
 ```
 
 `result.RecordsRead`, `result.RecordsAccepted`, `result.RecordsRejected`,
@@ -626,14 +626,14 @@ for e in result.Events do
 ```
 
 The runner checks `ctx.CancellationToken` before starting so that an
-already-cancelled token throws immediately without touching the source.
+already-cancelled token throws immediately without touching the root.
 
-### Unhandled exceptions — retries and guaranteed `PipelineResult`
+### Unhandled exceptions — retries and guaranteed `Harvest`
 
 `runWithContext` handles failures according to the `RetryPolicy` on the
 context. With the default `NoRetry`, any unhandled exception is caught,
-emitted as one `Fatal`-severity `DiagnosticEvent`, and a well-formed
-`PipelineResult` is returned reflecting the partial run.
+emitted as one `Fatal`-severity `Pulse`, and a well-formed
+`Harvest` is returned reflecting the partial run.
 
 When a `FixedDelay` retry policy is configured, the engine re-executes
 the **entire pipeline** from scratch on each retry. Each failed attempt
@@ -645,7 +645,7 @@ result is returned:
 // Retry up to 3 times with 500ms between attempts
 let ctx = { ExecutionContext.``default`` () with RetryPolicy = FixedDelay(3, TimeSpan.FromMilliseconds 500.0) }
 
-let! result = Pipeline.runWithContext ctx source flow sink
+let! result = Pipeline.runWithContext ctx root vessel leaf
 
 // Inspect retry diagnostics
 for e in result.Events do
@@ -662,8 +662,8 @@ rationale.
 
 | Failure scenario | Guarantee |
 |---|---|
-| Connector throws on open | `PipelineResult` with `RecordsFailed = 1` |
-| Flow throws mid-stream | Result with partial counts + `Fatal` event |
+| Connector throws on open | `Harvest` with `RecordsFailed = 1` |
+| Vessel throws mid-stream | Result with partial counts + `Fatal` event |
 | Duration | Always measured, even on failure |
 | Events emitted before crash | Included in `result.Events` |
 
@@ -676,7 +676,7 @@ rationale.
 
 ## Connectors
 
-A **connector** is a `Source<'T>` or `Sink<'T>` that ties the pipeline
+A **connector** is a `Root<'T>` or `Leaf<'T>` that ties the pipeline
 to a specific data store or transport. The core library ships two connectors out of the box:
 `Xylem.Connectors.InMemory` and `Xylem.Connectors.File`. JSON/CSV,
 database, and queue connectors are planned for future releases.
@@ -693,31 +693,31 @@ open Xylem.Connectors
 
 #### `InMemory.source`
 
-Creates a `Source<'T>` from any `seq<'T>`-compatible value — lists,
+Creates a `Root<'T>` from any `seq<'T>`-compatible value — lists,
 arrays, and sequences all work:
 
 ```fsharp
-let source = InMemory.source [1; 2; 3; 4; 5]
-let source = InMemory.source [| "a"; "b"; "c" |]
-let source = InMemory.source (seq { for i in 1..100 do yield i })
+let root = InMemory.source [1; 2; 3; 4; 5]
+let root = InMemory.source [| "a"; "b"; "c" |]
+let root = InMemory.source (seq { for i in 1..100 do yield i })
 ```
 
-Each call to `source.Read()` produces a fresh, independent
-`IAsyncEnumerable<'T>` — the source behaves exactly like any other
-Xylem source. Multiple runs over the same source are safe as long as
+Each call to `root.Read()` produces a fresh, independent
+`IAsyncEnumerable<'T>` — the root behaves exactly like any other
+Xylem root. Multiple runs over the same root are safe as long as
 the underlying sequence is re-iterable (lists and arrays always are;
 one-shot `seq` expressions are not).
 
 #### `InMemory.sink`
 
-Creates a `Sink<'T>` that accumulates every written item into an
+Creates a `Leaf<'T>` that accumulates every written item into an
 internal buffer. Returns the sink together with a **reader function**
 that snapshots the collected items on demand:
 
 ```fsharp
-let sink, read = InMemory.sink ()
+let leaf, read = InMemory.sink ()
 
-do! Pipeline.runWith source flow sink
+do! Pipeline.runWith root vessel leaf
 
 let items : int list = read ()   // ["item-2"; "item-4"; ...]
 ```
@@ -736,13 +736,13 @@ Assert.Equal<int list>([2; 4], read ())
 open Xylem.Connectors
 
 let ctx    = ExecutionContext.``default`` ()
-let source = InMemory.source [1; -2; 3; -4; 5]
-let flow   = Flow.validate "check-positive" ctx (fun x ->
+let root = InMemory.source [1; -2; 3; -4; 5]
+let vessel = Vessel.validate "check-positive" ctx (fun x ->
     if x > 0 then Ok x
     else Result.Error (ValidationError("value", "must be positive")))
-let sink, read = InMemory.sink ()
+let leaf, read = InMemory.sink ()
 
-let! result = Pipeline.runWithContext ctx source flow sink
+let! result = Pipeline.runWithContext ctx root vessel leaf
 
 printfn $"Accepted: %A{read ()}"          // [1; 3; 5]
 printfn $"Rejected: %d{result.RecordsRejected}"  // 2
@@ -752,7 +752,7 @@ printfn $"Rejected: %d{result.RecordsRejected}"  // 2
 
 ### Design decisions — `InMemory`
 
-#### `#seq<'T>` vs `seq<'T>` for the source input
+#### `#seq<'T>` vs `seq<'T>` for the root input
 
 `InMemory.source` accepts `#seq<'T>` (a flexible type) rather than
 `seq<'T>`. The difference: with `seq<'T>`, passing a `list` or
@@ -766,8 +766,8 @@ the idiomatic F# choice for functions that accept *any* sequence.
 
 #### `unit -> 'T list` reader vs returning the list directly
 
-`InMemory.sink` returns `Sink<'T> * (unit -> 'T list)` rather than
-`Sink<'T> * 'T list`. If it returned the list directly, the list would
+`InMemory.sink` returns `Leaf<'T> * (unit -> 'T list)` rather than
+`Leaf<'T> * 'T list`. If it returned the list directly, the list would
 be captured at construction time — before any items have been written —
 and would always be empty.
 
@@ -791,38 +791,38 @@ every call via `List.ofSeq`. This means:
 
 ---
 
-## Design decision: how flows emit diagnostics
+## Design decision: how vessels emit diagnostics
 
 This decision is worth documenting in full because the alternatives have
 non-obvious trade-offs.
 
 ### Option A — `Result` in the stream (rejected)
 
-The most obviously functional approach: flows return
-`IAsyncEnumerable<Result<'TOut, DiagnosticEvent>>` so rejections are
+The most obviously functional approach: vessels return
+`IAsyncEnumerable<Result<'TOut, Pulse>>` so rejections are
 inline:
 
 ```fsharp
-type Flow<'TIn, 'TOut> = {
-    Transform: IAsyncEnumerable<'TIn> -> IAsyncEnumerable<Result<'TOut, DiagnosticEvent>>
+type Vessel<'TIn, 'TOut> = {
+    Transform: IAsyncEnumerable<'TIn> -> IAsyncEnumerable<Result<'TOut, Pulse>>
 }
 ```
 
 **Why we didn't choose this:**
 
-- **Type explosion on composition.**<br/>After chaining two flows the return
+- **Type explosion on composition.**<br/>After chaining two vessels the return
   type becomes
-  `IAsyncEnumerable<Result<Result<'C, DiagnosticEvent>, DiagnosticEvent>>`.
+  `IAsyncEnumerable<Result<Result<'C, Pulse>, Pulse>>`.
   A `bind`-style compose flattens it, but the ergonomics deteriorate
   quickly and the engine must understand the nesting.
 - **Warnings are unrepresentable.**<br/>A record that *passes* validation but
   triggers a warning (e.g. a coerced null) must be `Ok` — there is no
   channel for "healthy record, but here is a note". You would need
-  `Result<'TOut * DiagnosticEvent list, DiagnosticEvent list>`, which is
+  `Result<'TOut * Pulse list, Pulse list>`, which is
   a very complex return type.
-- **Most flows don't reject anything.**<br/>`map` and `filter` are pure
-  transforms. Forcing all flows to wrap their output in `Result` for the
-  sake of a few validation flows is a poor trade.
+- **Most vessels don't reject anything.**<br/>`map` and `filter` are pure
+  transforms. Forcing all vessels to wrap their output in `Result` for the
+  sake of a few validation vessels is a poor trade.
 
 ### Option B — `ExecutionContext` with `Emit` (chosen, implemented)
 
@@ -832,22 +832,22 @@ A context object is threaded through diagnostics-aware combinators:
 type ExecutionContext = {
     CancellationToken: System.Threading.CancellationToken
     BatchSize:         int
-    Emit:              DiagnosticEvent -> unit
-    ReadEvents:        unit -> DiagnosticEvent list
+    Emit:              Pulse -> unit
+    ReadEvents:        unit -> Pulse list
     RetryPolicy:       RetryPolicy
 }
 ```
 
-Flows that need to emit events receive a context at *construction time*,
-not as part of the `Flow` type itself:
+Vessels that need to emit events receive a context at *construction time*,
+not as part of the `Vessel` type itself:
 
 ```fsharp
-// Pure flow — no context needed, clean signature
-let doubled = Flow.map (fun x -> x * 2)
+// Pure vessel — no context needed, clean signature
+let doubled = Vessel.map (fun x -> x * 2)
 
-// Validating flow — opts into context at construction time
+// Validating vessel — opts into context at construction time
 let validateAge ctx =
-    Flow.validate "check-age" ctx (fun person ->
+    Vessel.validate "check-age" ctx (fun person ->
         if person.Age < 0 then
             Result.Error (ValidationError("Age", "must be >= 0"))
         else
@@ -856,22 +856,22 @@ let validateAge ctx =
 
 **Why this works:**
 
-- `Flow<'TIn,'TOut>` stays exactly as it is. No type changes, no
+- `Vessel<'TIn,'TOut>` stays exactly as it is. No type changes, no
   breaking changes to existing combinators.
 - Any event at any time: warnings on healthy records, multiple errors per
   record, informational events mid-stream — all natural.
-- Pure flows (`map`, `filter`, `compose`) remain completely side-effect
+- Pure vessels (`map`, `filter`, `compose`) remain completely side-effect
   free and need no context.
-- Only flows that *opt in* to diagnostics touch `ctx`.
+- Only vessels that *opt in* to diagnostics touch `ctx`.
 
-**The drawback:** `ctx.Emit` is a side effect. Flows that use it are no
+**The drawback:** `ctx.Emit` is a side effect. Vessels that use it are no
 longer purely functional — they produce output *and* write to the context.
 This is a deliberate pragmatic choice. ETL pipelines inherently
 produce side effects (writing files, hitting databases); pretending
 diagnostics can be fully pure adds complexity without benefit.
 
 `ExecutionContext` and the ctx-aware combinators (`validate`, `enrich`)
-are now implemented. Pure flows (`map`, `filter`, `compose`) remain
+are now implemented. Pure vessels (`map`, `filter`, `compose`) remain
 completely side-effect free and need no context.
 
 ---
@@ -881,9 +881,9 @@ completely side-effect free and need no context.
 ### The problem
 
 `runWithContext` is the only place that can return a structured
-`PipelineResult`. Before this decision was made, any unhandled exception
-— from a connector opening a file, a flow throwing mid-stream, a sink
-failing to write — caused the `Task<PipelineResult>` itself to fault.
+`Harvest`. Before this decision was made, any unhandled exception
+— from a connector opening a file, a vessel throwing mid-stream, a sink
+failing to write — caused the `Task<Harvest>` itself to fault.
 This meant:
 
 - The structured result was never returned; callers had to use a raw
@@ -900,34 +900,34 @@ This meant:
 **Option A — leave exceptions unhandled (rejected)**
 
 Connectors throw, callers wrap the runner in `try/catch`. Simple and
-honest, but `PipelineResult` never reaches the caller on hard failures
+honest, but `Harvest` never reaches the caller on hard failures
 and `Fatal` events serve no purpose for connector-level errors.
 
 **Option B — catch in `runWithContext` (chosen)**
 
 The engine wraps the inner run in `try/catch`. Any unhandled exception
-is caught, emitted as a `Fatal` `DiagnosticEvent`, and the runner returns
-a well-formed `PipelineResult` reflecting the partial run. The `IoError`
+is caught, emitted as a `Fatal` `Pulse`, and the runner returns
+a well-formed `Harvest` reflecting the partial run. The `IoError`
 case on `ErrorKind` — which existed in the model but was previously
 unreachable — is now the natural carrier for connector I/O failures.
 
 **Option C — connectors accept `ctx` and emit `Fatal` themselves (rejected)**
 
 Connectors would be responsible for catching their own errors and emitting
-diagnostics. This is consistent with how flows handle per-record errors,
+diagnostics. This is consistent with how vessels handle per-record errors,
 but it forces every connector to accept and thread an `ExecutionContext` —
-complicating the `Source<'T>` / `Sink<'T>` types and coupling connectors
+complicating the `Root<'T>` / `Leaf<'T>` types and coupling connectors
 to the diagnostics model for what are fundamentally infrastructure errors.
 
 ### Why Option B
 
-- `Source<'T>` and `Sink<'T>` stay context-free. Connectors have no
+- `Root<'T>` and `Leaf<'T>` stay context-free. Connectors have no
   dependency on `ExecutionContext`.
-- `PipelineResult` is always returned — callers can always inspect
+- `Harvest` is always returned — callers can always inspect
   `result.RecordsFailed` and `result.Events` regardless of how the run
   ended.
 - `Fatal` in the diagnostics model becomes meaningful end-to-end: a
-  connector I/O failure, a mid-stream flow exception, and a cancelled
+  connector I/O failure, a mid-stream vessel exception, and a cancelled
   run can all be distinguished by `Severity` and `Kind`.
 - The catch is in one place only — the engine — not scattered across
   every connector.
@@ -972,10 +972,10 @@ let ctx =
 
 ### What gets retried
 
-The retry loop wraps the **entire pipeline**: source → flow → sink.
-On each retry, `source.Read()` is called again, the flow processes from
+The retry loop wraps the **entire pipeline**: root → vessel → leaf.
+On each retry, `root.Read()` is called again, the vessel processes from
 the beginning, and the sink receives a fresh stream. The record count
-is reset per attempt — `PipelineResult.RecordsRead` reflects only the
+is reset per attempt — `Harvest.RecordsRead` reflects only the
 last (successful or final) attempt.
 
 ### Diagnostic events during retries
@@ -1015,7 +1015,7 @@ let ctx =
     { ExecutionContext.``default`` () with
         RetryPolicy = FixedDelay(2, TimeSpan.FromMilliseconds 200.0) }
 
-let! result = Pipeline.runWithContext ctx source flow sink
+let! result = Pipeline.runWithContext ctx root vessel leaf
 
 printfn $"Read: %d{result.RecordsRead}  Failed: %d{result.RecordsFailed}"
 
@@ -1037,7 +1037,7 @@ for (sev, attempt) in retries do
 ### The problem
 
 `runWithContext` catches unhandled exceptions and returns a
-`PipelineResult`, but the pipeline fails permanently on the first
+`Harvest`, but the pipeline fails permanently on the first
 error. Transient failures — network glitches, file locks, temporary
 service unavailability — are common in ETL workloads and ideally
 shouldn't require manual restarting.
@@ -1046,7 +1046,7 @@ shouldn't require manual restarting.
 
 **Option A — per-record retry (rejected)**
 
-Retry individual records that fail inside a flow or sink. This is the
+Retry individual records that fail inside a vessel or sink. This is the
 most granular approach and avoids re-reading the source.
 
 *Why rejected:* Requires record-level buffering, replay infrastructure,
@@ -1057,8 +1057,8 @@ with checkpointing and dead-letter handling).
 
 **Option B — whole-pipeline retry (chosen, implemented)**
 
-On failure, re-execute the entire pipeline from `source.Read()`. The
-source produces a fresh stream, the flow transforms from scratch, and
+On failure, re-execute the entire pipeline from `root.Read()`. The
+root produces a fresh stream, the vessel transforms from scratch, and
 the sink receives fresh output.
 
 *Why chosen:*
@@ -1091,7 +1091,7 @@ is the natural place for it.
 |---|---|
 | Non-idempotent sources | Re-reading may produce different data or trigger side effects. Callers with non-idempotent sources should use `NoRetry`. |
 | Sink side effects | A sink that already wrote partial output before the failure will receive a fresh stream on retry. Sinks that append (e.g. `File.sink` with `Append = true`) may duplicate records. Overwrite-by-default sinks are safe. |
-| Performance | Re-reading the full source is wasteful if the failure happened near the end. Acceptable at v1; per-record retry with checkpointing is a v2 concern. |
+| Performance | Re-reading the full root is wasteful if the failure happened near the end. Acceptable at v1; per-record retry with checkpointing is a v2 concern. |
 | Event accumulation | Events from failed attempts persist in the context. This is intentional — they provide retry history — but callers should be aware that `result.Events` may contain `Warning`-level `RetryError` events from earlier attempts. |
 
 ### Why `FixedDelay` only (for now)
@@ -1105,8 +1105,8 @@ initialDelay * multiplier` in v2 is a non-breaking change.
 
 ### Why `Emit` is synchronous and thread-safe
 
-The `Emit` field on `ExecutionContext` is `DiagnosticEvent -> unit`
-rather than `DiagnosticEvent -> Task<unit>`. This was a deliberate
+The `Emit` field on `ExecutionContext` is `Pulse -> unit`
+rather than `Pulse -> Task<unit>`. This was a deliberate
 choice:
 
 - **Ergonomics.** Every call site in `validate`, `enrich`, and the retry
@@ -1119,7 +1119,7 @@ choice:
   handles concurrent access safely. Under contention, the lock serialises
   writes without deadlock risk (the critical section is a single `Add`).
 - **Future async emission.** If v2 needs to stream events to an external
-  sink (e.g. a logging service), an `EmitAsync: DiagnosticEvent ->
+  sink (e.g. a logging service), an `EmitAsync: Pulse ->
   Task<unit>` field can be added alongside `Emit` without breaking
   existing callers. The engine can call `EmitAsync` when present and fall
   back to `Emit` otherwise.
@@ -1140,15 +1140,15 @@ open Xylem.Connectors
 
 `File.source` produces `string` lines. `File.sink` consumes `string`
 lines. **Parsing and serialisation are not the connector's job** — they
-belong in a `Flow` sitting between source and sink.
+belong in a `Vessel` sitting between root and leaf.
 
 This keeps each piece focused:
 
 ```
 File.source "input.csv"
-  → Flow.map parseCsvRow       // string → Row
-  → Flow.validate "check" ctx validator
-  → Flow.map formatCsvRow      // Row → string
+  → Vessel.map parseCsvRow       // string → Row
+  → Vessel.validate "check" ctx validator
+  → Vessel.map formatCsvRow      // Row → string
   → File.sink "output.csv"
 ```
 
@@ -1159,13 +1159,13 @@ whether they wanted to or not.
 #### `File.sourceFrom` — factory constructor
 
 The primary constructor. Accepts a factory function that produces a
-`TextReader` and wraps it as a `Source<string>`:
+`TextReader` and wraps it as a `Root<string>`:
 
 ```fsharp
-File.sourceFrom : (unit -> TextReader) -> Source<string>
+File.sourceFrom : (unit -> TextReader) -> Root<string>
 ```
 
-Each call to `source.Read()` invokes the factory to obtain a fresh
+Each call to `root.Read()` invokes the factory to obtain a fresh
 `TextReader`, yields its lines one at a time, and disposes the reader
 when enumeration ends. The factory is called lazily — only when the
 first item is pulled from the stream.
@@ -1177,34 +1177,34 @@ This is the overload to use in tests (see *Testing without I/O* below).
 Wraps `sourceFrom` with a `StreamReader` factory for a file path:
 
 ```fsharp
-let source : Source<string> = File.source "data.csv"
+let root : Root<string> = File.source "data.csv"
 ```
 
 Equivalent to:
 
 ```fsharp
-let source = File.sourceFrom (fun () -> new StreamReader("data.csv"))
+let root = File.sourceFrom (fun () -> new StreamReader("data.csv"))
 ```
 
-Each call to `source.Read()` opens a fresh `StreamReader`, streams
+Each call to `root.Read()` opens a fresh `StreamReader`, streams
 lines one at a time, and disposes the reader on completion, cancellation,
 or exception. The file is never fully loaded into memory.
 
 Empty lines are yielded as empty strings — they are not skipped. Use
-`Flow.filter (fun line -> line <> "")` to drop them upstream.
+`Vessel.filter (fun line -> line <> "")` to drop them upstream.
 
 If the file does not exist or cannot be opened, the `StreamReader`
 constructor throws during the first iteration. The exception is caught
 by `Pipeline.runWithContext`, which emits a `Fatal` diagnostic and
-returns a well-formed `PipelineResult`.
+returns a well-formed `Harvest`.
 
 #### `File.sinkFrom` — factory constructor
 
 The primary constructor. Accepts a factory function that produces a
-`TextWriter` and wraps it as a `Sink<string>`:
+`TextWriter` and wraps it as a `Leaf<string>`:
 
 ```fsharp
-File.sinkFrom : (unit -> TextWriter) -> Sink<string>
+File.sinkFrom : (unit -> TextWriter) -> Leaf<string>
 ```
 
 `Write` invokes the factory once, writes each string as a line via
@@ -1219,21 +1219,21 @@ Wraps `sinkFrom` with a `StreamWriter` factory for a file path:
 
 ```fsharp
 // Overwrite (default) — one-arg convenience
-let sink : Sink<string> = File.sinkDefault "output.csv"
+let leaf : Leaf<string> = File.sinkDefault "output.csv"
 
 // With explicit options
-let sink = File.sink "output.csv" { FileSinkOptions.Default with Append = true }
+let leaf = File.sink "output.csv" { FileLeafOptions.Default with Append = true }
 ```
 
 The default behaviour **overwrites** the file if it already exists —
 pipelines are designed to be re-runnable, and appending to a previous
 run's output would produce corrupt data. Append is opt-in via
-`FileSinkOptions`.
+`FileLeafOptions`.
 
-#### `FileSinkOptions`
+#### `FileLeafOptions`
 
 ```fsharp
-type FileSinkOptions = {
+type FileLeafOptions = {
     Append:   bool
     Encoding: System.Text.Encoding
 }
@@ -1252,7 +1252,7 @@ type FileSinkOptions = {
 | `File.sinkFrom` | At the start of `Write(stream)` | When `Write` returns (success or exception) |
 
 Both use `use` bindings so disposal is guaranteed regardless of how the
-stream terminates. Multiple calls to `source.Read()` are safe — each
+stream terminates. Multiple calls to `root.Read()` are safe — each
 call invokes the factory independently.
 
 #### Testing without I/O
@@ -1264,16 +1264,16 @@ environment dependencies:
 
 ```fsharp
 // Source — inject a StringReader
-let source = File.sourceFrom (fun () -> new StringReader("alice\nbob\ncarol"))
+let root = File.sourceFrom (fun () -> new StringReader("alice\nbob\ncarol"))
 
-let! lines = source.Read() |> TaskSeq.toListAsync
+let! lines = root.Read() |> TaskSeq.toListAsync
 // lines = ["alice"; "bob"; "carol"]
 
 // Sink — inject a StringWriter and inspect what was written
 let sw   = new StringWriter()
-let sink = File.sinkFrom (fun () -> sw :> TextWriter)
+let leaf = File.sinkFrom (fun () -> sw :> TextWriter)
 
-do! sink.Write(taskSeq { yield "x"; yield "y" })
+do! leaf.Write(taskSeq { yield "x"; yield "y" })
 // sw.ToString() = "x\r\ny\r\n"  (or "x\ny\n" on Unix)
 ```
 
@@ -1301,18 +1301,18 @@ let formatLine (row: Row) : string = $"{row.Name},{row.Age}"
 
 let ctx = ExecutionContext.``default`` ()
 
-let source = File.source "people.csv"
-let flow =
-    Flow.compose
-        (Flow.enrich "parse" ctx parseLine)
-        (Flow.compose
-            (Flow.validate "check-age" ctx (fun row ->
+let root = File.source "people.csv"
+let vessel =
+    Vessel.compose
+        (Vessel.enrich "parse" ctx parseLine)
+        (Vessel.compose
+            (Vessel.validate "check-age" ctx (fun row ->
                 if row.Age >= 0 then Ok row
                 else Result.Error (ValidationError("Age", "must be non-negative"))))
-            (Flow.map formatLine))
-let sink = File.sinkDefault "people-clean.csv"
+            (Vessel.map formatLine))
+let leaf = File.sinkDefault "people-clean.csv"
 
-let! result = Pipeline.runWithContext ctx source flow sink
+let! result = Pipeline.runWithContext ctx root vessel leaf
 
 printfn $"Read: %d{result.RecordsRead}  Accepted: %d{result.RecordsAccepted}  Rejected: %d{result.RecordsRejected}"
 ```
@@ -1328,11 +1328,11 @@ The alternative would be `File.source<'T>` with a built-in
 format concerns: the connector would need to know about CSV, JSON, or
 whatever format the caller chooses.
 
-Keeping connectors as `Source<string>` / `Sink<string>` means format
-handling belongs in a `Flow`, which is the correct abstraction for
+Keeping connectors as `Root<string>` / `Leaf<string>` means format
+handling belongs in a `Vessel`, which is the correct abstraction for
 record-level transforms. The upcoming JSON and CSV connectors will
 follow the same principle — they will be thin wrappers that compose a
-`File.source` with a parsing flow.
+`File.source` with a parsing vessel.
 
 #### Factory functions for testability
 
@@ -1351,13 +1351,13 @@ the `sourceFrom`/`sinkFrom` behaviour.
 
 Append-by-default would silently corrupt output on a rerun.
 Overwrite-by-default makes pipelines idempotent and rerunnable without
-manual cleanup. Append is opt-in via `FileSinkOptions`.
+manual cleanup. Append is opt-in via `FileLeafOptions`.
 
 #### `UTF-8` without BOM
 
 UTF-8 without BOM is the cross-platform default. BOM causes problems
 with many Unix tools and some parsers. Callers that need BOM or a
-different encoding can supply a custom `Encoding` via `FileSinkOptions`.
+different encoding can supply a custom `Encoding` via `FileLeafOptions`.
 
 #### Context-free connectors
 
@@ -1365,6 +1365,6 @@ different encoding can supply a custom `Encoding` via `FileSinkOptions`.
 failures at the connector level (file not found, permission denied) are
 fatal and unrecoverable — they are not per-record events. The engine's
 `try/catch` in `runWithContext` handles them uniformly, emitting a
-`Fatal` diagnostic and returning a well-formed `PipelineResult`. See the
+`Fatal` diagnostic and returning a well-formed `Harvest`. See the
 *"Design decision: exception handling in `runWithContext`"* section for
 full details.
