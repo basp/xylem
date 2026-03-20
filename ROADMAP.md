@@ -28,11 +28,11 @@ By the end of v1, users should be able to:
 ## Scope
 
 ### 1. Core pipeline model
-- `Source<'T>`
-- `Flow<'TIn, 'TOut>`
-- `Sink<'T>`
-- `Pipeline<'TIn, 'TOut>`
-- `PipelineResult`
+- `Root<'T>`
+- `Vessel<'TIn, 'TOut>`
+- `Leaf<'T>`
+- `Pipeline`
+- `Harvest`
 - `ExecutionContext`
 
 ### 2. Basic transformations
@@ -44,7 +44,7 @@ By the end of v1, users should be able to:
 - simple branching/routing
 
 ### 3. Diagnostics
-- structured diagnostic events
+- structured diagnostic pulses
 - warnings and errors
 - execution timing
 - counts for read / accepted / rejected / failed items
@@ -65,8 +65,8 @@ By the end of v1, users should be able to:
 
 ### 6. First connectors
 Keep this small and useful:
-- file source
-- file sink
+- file root
+- file leaf
 - JSON or CSV connector
 - one simple in-memory connector for tests
 

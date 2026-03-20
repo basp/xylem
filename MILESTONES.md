@@ -2,14 +2,14 @@
 
 | Milestone | Version | Priority | Dependencies | Outcome |
 |---|---:|---:|---|---|
-| Core domain model | v1 | High | None | Defines `Source`, `Flow`, `Sink`, `Pipeline`, `ExecutionContext`, and result types |
+| Core domain model | v1 | High | None | Defines `Root`, `Vessel`, `Leaf`, `Pipeline`, `ExecutionContext`, and `Harvest` |
 | Basic pipeline execution engine | v1 | High | Core domain model | Runs a linear pipeline end-to-end |
-| Diagnostics model | v1 | High | Core domain model | Captures structured warnings, errors, counts, and timings |
+| Diagnostics model | v1 | High | Core domain model | Captures structured pulses: warnings, errors, counts, and timings |
 | Error handling strategy | v1 | High | Core domain model, diagnostics model | Supports explicit failure handling and rejected records |
 | Batch processing support | v1 | High | Execution engine | Processes data in manageable chunks |
 | Basic transforms | v1 | High | Core domain model, execution engine | Provides map/filter/validate/enrich operations |
-| File source and sink | v1 | High | Execution engine, error handling strategy | Enables practical real-world ETL scenarios |
-| JSON or CSV connector | v1 | Medium | File source/sink | Adds a common interchange format |
+| File root and leaf | v1 | High | Execution engine, error handling strategy | Enables practical real-world ETL scenarios |
+| JSON or CSV connector | v1 | Medium | File root/leaf | Adds a common interchange format |
 | In-memory test connector | v1 | Medium | Core domain model | Simplifies testing and examples |
 | Integration and diagnostics tests | v1 | High | All v1 core features | Verifies correctness and observability |
 | Public API documentation | v1 | High | Core v1 features | Makes the library usable and understandable |

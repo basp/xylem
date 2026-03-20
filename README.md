@@ -137,7 +137,7 @@ over the event stream. Per-stage summaries are available via `Ring` values.
 ## Current status
 
 Xylem is **mid-v1** — the core pipeline model, execution engine, diagnostics, basic
-transforms, and first connectors are implemented and covered by ~80 passing tests.
+transforms, and first connectors are implemented and covered by 83 passing tests.
 
 ### What's done
 

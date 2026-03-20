@@ -7,19 +7,19 @@
 ## v1 — Foundation release
 
 ### 1. Core domain model
-- [x] Define `Source<'T>`
-- [x] Define `Flow<'TIn, 'TOut>`
-- [x] Define `Sink<'T>`
+- [x] Define `Root<'T>`
+- [x] Define `Vessel<'TIn, 'TOut>`
+- [x] Define `Leaf<'T>`
 - [x] Define `Pipeline`
 - [x] Define `ExecutionContext`
-- [x] Define `PipelineResult`
+- [x] Define `Harvest`
 
 ### 2. Diagnostics model
-- [x] Define `DiagnosticEvent` discriminated union
+- [x] Define `Pulse` record type
 - [x] Structured warnings and errors
 - [x] Execution timing
 - [x] Counts: read / accepted / rejected / failed
-- [x] Per-stage summaries
+- [x] Per-stage summaries (`Ring`)
 
 ### 3. Error handling strategy
 - [x] `Result`-based outcomes throughout public API
@@ -46,12 +46,12 @@
 - [x] Chunked execution
 
 ### 7. In-memory connector
-- [x] In-memory source
-- [x] In-memory sink
+- [x] In-memory root
+- [x] In-memory leaf
 
 ### 8. File connectors
-- [x] File source
-- [x] File sink
+- [x] File root
+- [x] File leaf
 
 ### 9. JSON / CSV connector
 - [ ] JSON connector
