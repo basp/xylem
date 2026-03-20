@@ -41,7 +41,7 @@ By the end of v1, users should be able to:
 - validate
 - batch
 - enrich
-- simple branching/routing
+
 
 ### 3. Diagnostics
 - structured diagnostic pulses

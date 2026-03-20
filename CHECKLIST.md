@@ -39,7 +39,6 @@
 - [x] `validate`
 - [x] `batch`
 - [x] `enrich`
-- [ ] Simple routing / branching
 
 ### 6. Batch processing
 - [x] Configurable batch sizes

@@ -70,7 +70,7 @@ strong diagnostics and predictable behaviour.
 2. **Diagnostics model** — structured diagnostic pulses, counts (read / accepted / rejected / failed), timing
 3. **Error handling strategy** — `Result`-based outcomes, recoverable vs. fatal, rejection path
 4. **Basic execution engine** — async linear pipeline run, cancellation, deterministic stage ordering
-5. **Basic transforms** — `map`, `filter`, `validate`, `batch`, `enrich`, simple routing
+5. **Basic transforms** — `map`, `filter`, `validate`, `batch`, `enrich`
 6. **Batch processing** — configurable batch sizes, chunked execution
 7. **In-memory connector** — for tests and examples (no I/O required)
 8. **File root and leaf** — practical real-world ETL

@@ -153,7 +153,6 @@ transforms, and first connectors are implemented and covered by 83 passing tests
 ### What's next
 
 - ✅ Basic retry policy (with thread-safe diagnostics)
-- ⬜ Simple routing / branching
 - ✅ Per-stage diagnostic summaries
 - ⬜ JSON and CSV connectors
 - ⬜ Error handling and connector authoring guides
