@@ -1,4 +1,4 @@
-# Connectors
+# 🔗 Connectors
 
 Built-in connectors that ship with Xylem — `InMemory` for tests and `File` for local file system I/O.
 

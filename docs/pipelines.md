@@ -1,4 +1,4 @@
-# Running Pipelines
+# 🎍 Pipelines
 
 How to execute a complete Root → Vessel → Leaf pipeline and interpret the results.
 

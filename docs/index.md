@@ -1,4 +1,4 @@
-# Xylem Documentation
+# 🌿 Xylem Documentation
 
 > A composable, diagnostic-first ETL library written in idiomatic F#.
 
@@ -9,15 +9,15 @@ a full diagnostic event stream — even when things go wrong.
 
 ---
 
-## Getting Started
+## 🧭 Getting Started
 
 Start with **Core Types** to understand the three building blocks, then
-read **Running Pipelines** to see how they fit together. The remaining
+read **Pipelines** to see how they fit together. The remaining
 guides cover specific topics as you need them.
 
 ---
 
-## Guides
+## 🗺️ Guides
 
 ### [Core Types](core-types.md)
 
@@ -43,7 +43,7 @@ retry policy. Also covers context-aware vessel combinators:
 `Vessel.validate` (check records), `Vessel.enrich` (transform with
 possible rejection), and `Vessel.batch` (group into fixed-size arrays).
 
-### [Running Pipelines](pipelines.md)
+### [Pipelines](pipelines.md)
 
 How `Pipeline.runWithContext` executes a full Root → Vessel → Leaf
 chain. Covers record counting, wall-clock timing, the guaranteed

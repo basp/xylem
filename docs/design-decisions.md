@@ -1,4 +1,4 @@
-# Design Decisions
+# 📐 Design Decisions
 
 Rationale behind key architectural choices in Xylem — the trade-offs, 
 alternatives considered, and why each option was chosen.

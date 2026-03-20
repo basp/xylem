@@ -451,6 +451,21 @@ module Vessel =
                     yield buffer.ToArray()
             } }
 
+    /// <summary>
+    /// Alias for <c>filter</c> — prunes branches (records) that don't meet the condition.
+    /// </summary>
+    let prune = filter
+
+    /// <summary>
+    /// Alias for <c>enrich</c> — absorbs nutrients (data) to grow the record.
+    /// </summary>
+    let absorb = enrich
+
+    /// <summary>
+    /// Alias for <c>map</c> — transmutes the record into a new form.
+    /// </summary>
+    let transmute = map
+
 module Pipeline =
 
     open Domain
@@ -541,3 +556,8 @@ module Pipeline =
             sw.Stop()
             return Harvest.fromEvents count.Value sw.Elapsed (ctx.ReadEvents())
         }
+
+    /// <summary>
+    /// Alias for <c>runWithContext</c> — flows the data through the xylem vessels.
+    /// </summary>
+    let flow = runWithContext
