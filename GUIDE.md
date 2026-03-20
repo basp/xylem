@@ -277,6 +277,139 @@ from folding the list themselves.
 
 ---
 
+## `ExecutionContext`
+
+An `ExecutionContext` coordinates a single pipeline run. It carries
+everything a flow or combinator needs at runtime — without baking
+run-specific concerns into the `Flow` type itself.
+
+### Type definition
+
+```fsharp
+type ExecutionContext = {
+    CancellationToken: System.Threading.CancellationToken
+    BatchSize:         int
+    Emit:              DiagnosticEvent -> unit
+    ReadEvents:        unit -> DiagnosticEvent list
+}
+```
+
+| Field | Purpose |
+|---|---|
+| `CancellationToken` | Signals cooperative cancellation; ctx-aware flows check it per item |
+| `BatchSize` | Preferred number of records per batch for batch-aware sinks and flows |
+| `Emit` | Records a `DiagnosticEvent` for the current run |
+| `ReadEvents` | Returns all events emitted so far, in emission order |
+
+### Creating a context
+
+```fsharp
+// Sensible defaults — CancellationToken.None, BatchSize 1 000
+let ctx = ExecutionContext.``default`` ()
+
+// Explicit token and batch size
+use cts = new System.Threading.CancellationTokenSource()
+let ctx = ExecutionContext.create cts.Token 500
+```
+
+`ExecutionContext.create` wires `Emit` and `ReadEvents` to the same
+internal `ResizeArray`, so every event emitted during a run is
+retrievable at the end.
+
+> **Note:** The current `Emit` implementation is not thread-safe.
+> Concurrent flow execution is a v2 concern; for now all ctx-aware
+> combinators iterate sequentially.
+
+---
+
+## Context-aware flow combinators
+
+Pure flows (`map`, `filter`, `compose`) have no side effects and need no
+context. Combinators that can *reject or fail records* receive an
+`ExecutionContext` at construction time so they can emit structured
+diagnostics without changing the `Flow` type.
+
+### `Flow.validate`
+
+Validates every item; passes `Ok` items downstream unchanged and drops
+`Error` items, emitting one `DiagnosticEvent` of severity `Error` per
+rejection.
+
+```fsharp
+let flow : Flow<int, int> =
+    Flow.validate "check-positive" ctx (fun x ->
+        if x > 0 then Ok x
+        else Result.Error (ValidationError("value", "must be positive")))
+```
+
+The validator signature is `'T -> Result<'T, ErrorKind>` — the output
+type is the same as the input type. Use `enrich` when you need a type
+change.
+
+Each emitted event records:
+- `Stage` — the `stageName` string passed at construction
+- `RecordIndex` — the 0-based position of the rejected record in the stream
+- `Kind` — exactly the `ErrorKind` returned by the validator
+
+The combinator calls `CancellationToken.ThrowIfCancellationRequested()`
+at the start of each iteration, so an already-cancelled token stops the
+stream immediately.
+
+### `Flow.enrich`
+
+Enriches every item using a function that may change the record type.
+`Ok` items are passed downstream as the enriched value; `Error` items
+are dropped with an `Error` diagnostic — same pattern as `validate`.
+
+```fsharp
+// int -> string enrichment (type changes)
+let flow : Flow<int, string> =
+    Flow.enrich "add-label" ctx (fun x ->
+        if x > 0 then Ok $"item-{x}"
+        else Result.Error (ValidationError("value", "must be positive")))
+```
+
+The enricher signature is `'T -> Result<'TOut, ErrorKind>`, making
+`enrich` the right tool for:
+
+- **Lookups** — resolve an ID to a full record
+- **Projections** — reshape a row into a different type
+- **Joins** — attach related data from another source
+
+> **`validate` vs `enrich`:**
+> `validate` is a special case of `enrich` where `'T = 'TOut` — it keeps
+> the shape, only the record's worthiness is in question. Use `validate`
+> when you are checking; use `enrich` when you are transforming.
+
+---
+
+## Running a pipeline with context
+
+`Pipeline.runWithContext` is the full-featured runner. It wraps
+`runWith`, counts every record emitted by the source, measures
+wall-clock duration, and collects all diagnostic events from `ctx`:
+
+```fsharp
+let ctx = ExecutionContext.``default`` ()
+
+let! result : PipelineResult = Pipeline.runWithContext ctx source flow sink
+```
+
+`result.RecordsRead`, `result.RecordsAccepted`, `result.RecordsRejected`,
+and `result.RecordsFailed` are derived from the events in `ctx` — they
+are always consistent with `result.Events`.
+
+```fsharp
+printfn $"Read: %d{result.RecordsRead}  Accepted: %d{result.RecordsAccepted}  Rejected: %d{result.RecordsRejected}"
+for e in result.Events do
+    printfn $"[%A{e.Severity}] stage=%A{e.Stage} index=%A{e.RecordIndex} — %s{e.Message}"
+```
+
+The runner checks `ctx.CancellationToken` before starting so that an
+already-cancelled token throws immediately without touching the source.
+
+---
+
 ## Design decision: how flows emit diagnostics
 
 This decision is worth documenting in full because the alternatives have
@@ -310,14 +443,16 @@ type Flow<'TIn, 'TOut> = {
   transforms. Forcing all flows to wrap their output in `Result` for the
   sake of a few validation flows is a poor trade.
 
-### Option B — `ExecutionContext` with `Emit` (chosen, deferred)
+### Option B — `ExecutionContext` with `Emit` (chosen, implemented)
 
 A context object is threaded through diagnostics-aware combinators:
 
 ```fsharp
 type ExecutionContext = {
-    Emit: DiagnosticEvent -> unit
-    // future: CancellationToken, BatchSize, ...
+    CancellationToken: System.Threading.CancellationToken
+    BatchSize:         int
+    Emit:              DiagnosticEvent -> unit
+    ReadEvents:        unit -> DiagnosticEvent list
 }
 ```
 
@@ -330,9 +465,9 @@ let doubled = Flow.map (fun x -> x * 2)
 
 // Validating flow — opts into context at construction time
 let validateAge ctx =
-    Flow.validate ctx (fun person ->
+    Flow.validate "check-age" ctx (fun person ->
         if person.Age < 0 then
-            Error (ValidationError("Age", "must be >= 0"))
+            Result.Error (ValidationError("Age", "must be >= 0"))
         else
             Ok person)
 ```
@@ -353,7 +488,6 @@ This is a deliberate pragmatic choice. Real ETL pipelines inherently
 produce side effects (writing files, hitting databases); pretending
 diagnostics can be fully pure adds complexity without benefit.
 
-**Deferred:** `ExecutionContext` and `ctx`-aware combinators (`validate`,
-`enrich`, etc.) are introduced in the next increment. The diagnostics
-*types* (`Severity`, `ErrorKind`, `DiagnosticEvent`, `PipelineResult`)
-are defined now so tests and flows can reference them immediately.
+`ExecutionContext` and the ctx-aware combinators (`validate`, `enrich`)
+are now implemented. Pure flows (`map`, `filter`, `compose`) remain
+completely side-effect free and need no context.
