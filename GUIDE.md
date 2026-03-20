@@ -255,7 +255,7 @@ and carries the 1-based attempt number alongside the exception. Callers
 can pattern-match on it to distinguish retry-related diagnostics from
 other failures.
 
-**Adding a new well-known case is intentionally a breaking change.**
+> **Adding a new well-known case is intentionally a breaking change.**
 Exhaustive pattern matches will fail to compile, forcing every caller to
 explicitly handle the new category. `Custom` is the safety valve when
 you need a domain-specific kind without modifying the library.

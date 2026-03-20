@@ -99,7 +99,7 @@ do! Pipeline.runWith source flow sink
 ## Current status
 
 Xylem is **mid-v1** — the core pipeline model, execution engine, diagnostics, basic
-transforms, and first connectors are implemented and covered by ~70 passing tests.
+transforms, and first connectors are implemented and covered by ~80 passing tests.
 
 ### What's done
 
@@ -116,7 +116,7 @@ transforms, and first connectors are implemented and covered by ~70 passing test
 
 - ✅ Basic retry policy (with thread-safe diagnostics)
 - ⬜ Simple routing / branching
-- ⬜ Per-stage diagnostic summaries
+- ✅ Per-stage diagnostic summaries
 - ⬜ JSON and CSV connectors
 - ⬜ Quickstart, error handling, and connector authoring guides
 

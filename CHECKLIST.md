@@ -19,7 +19,7 @@
 - [x] Structured warnings and errors
 - [x] Execution timing
 - [x] Counts: read / accepted / rejected / failed
-- [ ] Per-stage summaries
+- [x] Per-stage summaries
 
 ### 3. Error handling strategy
 - [x] `Result`-based outcomes throughout public API
