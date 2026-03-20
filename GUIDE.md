@@ -147,7 +147,7 @@ type Flow<'TIn, 'TOut> = {
 
 > **Flow vs Pipeline:** A `Flow` defines *what* transformation to apply
 > — it is a reusable, composable value. The `Pipeline` module defines
-> *how* to execute a complete Source → Flow → Sink chain. Think of a
+> *how* to execute a complete `Source` → `Flow` → `Sink` chain. Think of a
 > `Flow` as a recipe and `Pipeline.runWithContext` as the kitchen that
 > runs it.
 
@@ -525,12 +525,12 @@ carries the exception's message as the human-readable summary.
 
 **What this guarantees:**
 
-| Failure scenario | Before | After |
-|---|---|---|
-| Connector throws on open | Faulted `Task`, no result | `PipelineResult` with `RecordsFailed = 1` |
-| Flow throws mid-stream | Faulted `Task`, events lost | Result with partial counts + `Fatal` event |
-| Duration | Never measured | Always measured, even on failure |
-| Events emitted before crash | Only via `ctx.ReadEvents()` in caller's catch | Included in `result.Events` |
+| Failure scenario | Guarantee |
+|---|---|
+| Connector throws on open | `PipelineResult` with `RecordsFailed = 1` |
+| Flow throws mid-stream | Result with partial counts + `Fatal` event |
+| Duration | Always measured, even on failure |
+| Events emitted before crash | Included in `result.Events` |
 
 > **Note:** `OperationCanceledException` (from `CancellationToken`) is
 > intentionally **not** caught. A cancelled pipeline is not a pipeline
@@ -730,7 +730,7 @@ let validateAge ctx =
 
 **The drawback:** `ctx.Emit` is a side effect. Flows that use it are no
 longer purely functional — they produce output *and* write to the context.
-This is a deliberate pragmatic choice. Real ETL pipelines inherently
+This is a deliberate pragmatic choice. ETL pipelines inherently
 produce side effects (writing files, hitting databases); pretending
 diagnostics can be fully pure adds complexity without benefit.
 
