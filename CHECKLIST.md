@@ -37,13 +37,13 @@
 - [x] `map`
 - [x] `filter`
 - [x] `validate`
-- [ ] `batch`
+- [x] `batch`
 - [x] `enrich`
 - [ ] Simple routing / branching
 
 ### 6. Batch processing
-- [ ] Configurable batch sizes
-- [ ] Chunked execution
+- [x] Configurable batch sizes
+- [x] Chunked execution
 
 ### 7. In-memory connector
 - [ ] In-memory source

@@ -498,8 +498,114 @@ let ``Flow enrich throws OperationCanceledException for already-cancelled token`
 }
 
 // ---------------------------------------------------------------------------
-// Diagnostics
+// Flow.batch
 // ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``Flow batch groups items into full batches`` () = task {
+    let flow  = Flow.batch 3
+    let input = taskSeq { yield 1; yield 2; yield 3; yield 4; yield 5; yield 6 }
+
+    let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+    Assert.Equal(2, result.Length)
+    Assert.Equal<int[]>([| 1; 2; 3 |], result[0])
+    Assert.Equal<int[]>([| 4; 5; 6 |], result[1])
+}
+
+[<Fact>]
+let ``Flow batch emits a partial final batch when items do not divide evenly`` () = task {
+    let flow  = Flow.batch 3
+    let input = taskSeq { yield 1; yield 2; yield 3; yield 4; yield 5 }
+
+    let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+    Assert.Equal(2, result.Length)
+    Assert.Equal<int[]>([| 1; 2; 3 |], result[0])
+    Assert.Equal<int[]>([| 4; 5 |],    result[1])
+}
+
+[<Fact>]
+let ``Flow batch yields a single batch when items fewer than batchSize`` () = task {
+    let flow  = Flow.batch 10
+    let input = taskSeq { yield 1; yield 2; yield 3 }
+
+    let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+    Assert.Equal(1, result.Length)
+    Assert.Equal<int[]>([| 1; 2; 3 |], result[0])
+}
+
+[<Fact>]
+let ``Flow batch on empty stream yields empty stream`` () = task {
+    let flow = Flow.batch 3
+
+    let! result = flow.Transform(TaskSeq.empty) |> TaskSeq.toListAsync
+
+    Assert.Empty(result)
+}
+
+[<Fact>]
+let ``Flow batch with batchSize 1 yields one item per batch`` () = task {
+    let flow  = Flow.batch 1
+    let input = taskSeq { yield "a"; yield "b"; yield "c" }
+
+    let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+    Assert.Equal(3, result.Length)
+    Assert.Equal<string[]>([| "a" |], result[0])
+    Assert.Equal<string[]>([| "b" |], result[1])
+    Assert.Equal<string[]>([| "c" |], result[2])
+}
+
+[<Fact>]
+let ``Flow batch with exact multiple yields all full batches`` () = task {
+    let flow  = Flow.batch 2
+    let input = taskSeq { yield 1; yield 2; yield 3; yield 4 }
+
+    let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+    Assert.Equal(2, result.Length)
+    Assert.All(result, fun b -> Assert.Equal(2, b.Length))
+}
+
+[<Fact>]
+let ``Flow batch throws ArgumentException for batchSize zero`` () =
+    Assert.Throws<ArgumentException>(fun () -> Flow.batch 0 |> ignore)
+    |> ignore
+
+[<Fact>]
+let ``Flow batch throws ArgumentException for negative batchSize`` () =
+    Assert.Throws<ArgumentException>(fun () -> Flow.batch -1 |> ignore)
+    |> ignore
+
+[<Fact>]
+let ``Flow batch can be composed with map`` () = task {
+    // map first, then batch
+    let flow  = Flow.compose (Flow.map (fun x -> x * 10)) (Flow.batch 2)
+    let input = taskSeq { yield 1; yield 2; yield 3; yield 4 }
+
+    let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+    Assert.Equal(2, result.Length)
+    Assert.Equal<int[]>([| 10; 20 |], result[0])
+    Assert.Equal<int[]>([| 30; 40 |], result[1])
+}
+
+[<Fact>]
+let ``Flow batch respects ctx.BatchSize`` () = task {
+    let ctx   = ExecutionContext.create System.Threading.CancellationToken.None 2
+    let flow  = Flow.batch ctx.BatchSize
+    let input = taskSeq { yield 1; yield 2; yield 3 }
+
+    let! result = flow.Transform(input) |> TaskSeq.toListAsync
+
+    Assert.Equal(2, result.Length)
+    Assert.Equal<int[]>([| 1; 2 |], result[0])
+    Assert.Equal<int[]>([| 3 |],    result[1])
+}
+
+
 
 [<Fact>]
 let ``DiagnosticEvent can be constructed for each Severity`` () =

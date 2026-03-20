@@ -318,6 +318,28 @@ module Flow =
                         index <- index + 1L
             } }
 
+    /// <summary>
+    /// Creates a <c>Flow</c> that groups consecutive items into arrays of at most
+    /// <c>batchSize</c> items. The final batch is emitted even if it contains
+    /// fewer than <c>batchSize</c> items.
+    /// Throws <c>ArgumentException</c> if <c>batchSize</c> is less than 1.
+    /// To use the pipeline's configured batch size, pass <c>ctx.BatchSize</c>.
+    /// </summary>
+    let batch (batchSize: int) : Flow<'T, 'T[]> =
+        if batchSize < 1 then
+            raise (ArgumentException($"batchSize must be >= 1, was {batchSize}", nameof batchSize))
+        { Transform = fun stream ->
+            taskSeq {
+                let buffer = ResizeArray<'T>(batchSize)
+                for item in stream do
+                    buffer.Add(item)
+                    if buffer.Count = batchSize then
+                        yield buffer.ToArray()
+                        buffer.Clear()
+                if buffer.Count > 0 then
+                    yield buffer.ToArray()
+            } }
+
 module Pipeline =
 
     open Domain
