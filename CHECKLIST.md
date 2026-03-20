@@ -64,7 +64,7 @@
 - [x] Failure-path tests
 
 ### 11. Public API documentation
-- [ ] Quickstart guide
+- [x] Quickstart guide
 - [x] Pipeline composition guide
 - [x] Diagnostics guide
 - [ ] Error handling guide
