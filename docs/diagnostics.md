@@ -93,9 +93,11 @@ type Harvest = {
 }
 ```
 
-`Events` is the source of truth. The counts are pre-computed
-conveniences — they are always consistent with `Events` and save callers
-from folding the list themselves.
+`Events` is the source of truth for diagnostic events. The count fields
+are pre-computed conveniences: `RecordsRejected` and `RecordsFailed` are
+folded from event severities, while `RecordsAccepted` is computed as
+`RecordsRead - RecordsRejected - RecordsFailed`. This keeps all fields
+consistent and saves callers from folding the event list manually.
 
 ---
 

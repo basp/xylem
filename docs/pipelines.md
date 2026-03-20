@@ -17,9 +17,11 @@ let ctx = ExecutionContext.``default`` ()
 let! result : Harvest = Pipeline.runWithContext ctx root vessel leaf
 ```
 
-`result.RecordsRead`, `result.RecordsAccepted`, `result.RecordsRejected`,
-and `result.RecordsFailed` are derived from the events in `ctx` — they
-are always consistent with `result.Events`.
+`result.RecordsRead` is the direct count of records emitted by the root.
+`result.RecordsRejected` and `result.RecordsFailed` are derived from the
+events in `ctx`, and `result.RecordsAccepted` is computed as
+`RecordsRead - RecordsRejected - RecordsFailed`. These counts are always
+consistent with `result.Events`.
 
 ```fsharp
 printfn $"Read: %d{result.RecordsRead}  Accepted: %d{result.RecordsAccepted}  Rejected: %d{result.RecordsRejected}"
