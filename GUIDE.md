@@ -429,17 +429,17 @@ type Flow<'TIn, 'TOut> = {
 
 **Why we didn't choose this:**
 
-- **Type explosion on composition.** After chaining two flows the return
+- **Type explosion on composition.**<br/>After chaining two flows the return
   type becomes
   `IAsyncEnumerable<Result<Result<'C, DiagnosticEvent>, DiagnosticEvent>>`.
   A `bind`-style compose flattens it, but the ergonomics deteriorate
   quickly and the engine must understand the nesting.
-- **Warnings are unrepresentable.** A record that *passes* validation but
+- **Warnings are unrepresentable.**<br/>A record that *passes* validation but
   triggers a warning (e.g. a coerced null) must be `Ok` — there is no
   channel for "healthy record, but here is a note". You would need
   `Result<'TOut * DiagnosticEvent list, DiagnosticEvent list>`, which is
   a very complex return type.
-- **Most flows don't reject anything.** `map` and `filter` are pure
+- **Most flows don't reject anything.**<br/>`map` and `filter` are pure
   transforms. Forcing all flows to wrap their output in `Result` for the
   sake of a few validation flows is a poor trade.
 

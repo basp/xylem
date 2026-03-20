@@ -252,7 +252,7 @@ let ``Flow validate emits one Error event per rejected item`` () = task {
 let ``Flow validate emits correct RecordIndex for each rejected item`` () = task {
     let ctx = ExecutionContext.``default`` ()
     let flow = Flow.validate "stage" ctx positiveValidator
-    // indices:         0   1   2
+    // indices: 0 1 2
     let input = taskSeq { yield -1; yield 2; yield -3 }
 
     let! _ = flow.Transform(input) |> TaskSeq.toListAsync
@@ -361,7 +361,7 @@ let ``Flow validate throws OperationCanceledException for already-cancelled toke
     try
         let! _ = flow.Transform(input) |> TaskSeq.toListAsync
         ()
-    with :? System.OperationCanceledException ->
+    with :? OperationCanceledException ->
         threw <- true
 
     Assert.True(threw)
@@ -380,7 +380,7 @@ let ``Pipeline runWithContext throws OperationCanceledException for already-canc
     try
         let! _ = Pipeline.runWithContext ctx source flow sink
         ()
-    with :? System.OperationCanceledException ->
+    with :? OperationCanceledException ->
         threw <- true
 
     Assert.True(threw)
@@ -446,7 +446,7 @@ let ``Flow enrich emits one Error event per failed enrichment`` () = task {
 let ``Flow enrich emits correct RecordIndex for each failed item`` () = task {
     let ctx   = ExecutionContext.``default`` ()
     let flow  = Flow.enrich "stage" ctx addLabelEnricher
-    // indices:         0   1   2
+    // indices: 0 1 2
     let input = taskSeq { yield -1; yield 2; yield -3 }
 
     let! _ = flow.Transform(input) |> TaskSeq.toListAsync
@@ -491,13 +491,15 @@ let ``Flow enrich throws OperationCanceledException for already-cancelled token`
     try
         let! _ = flow.Transform(input) |> TaskSeq.toListAsync
         ()
-    with :? System.OperationCanceledException ->
+    with :? OperationCanceledException ->
         threw <- true
 
     Assert.True(threw)
 }
 
-
+// ---------------------------------------------------------------------------
+// Diagnostics
+// ---------------------------------------------------------------------------
 
 [<Fact>]
 let ``DiagnosticEvent can be constructed for each Severity`` () =

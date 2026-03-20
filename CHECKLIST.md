@@ -10,7 +10,7 @@
 - [x] Define `Source<'T>`
 - [x] Define `Flow<'TIn, 'TOut>`
 - [x] Define `Sink<'T>`
-- [x] Define `Pipeline<'TIn, 'TOut>`
+- [x] Define `Pipeline`
 - [x] Define `ExecutionContext`
 - [x] Define `PipelineResult`
 
