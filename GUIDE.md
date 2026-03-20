@@ -882,6 +882,13 @@ If all retries are exhausted, a `Fatal`-level `RetryError` is emitted:
 
 ### Example: retry with inspection
 
+This example configures a pipeline that retries up to twice on failure,
+waiting 200ms between attempts. After the run, it prints the overall
+counts and then extracts the retry-specific events from the result.
+Because diagnostic events accumulate across all attempts, you get a
+full history: a `Warning` for each failed-but-retried attempt, and — if
+the pipeline never recovered — a final `Fatal` indicating exhaustion.
+
 ```fsharp
 open System
 
