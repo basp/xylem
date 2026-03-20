@@ -166,6 +166,9 @@ let doubled : Flow<int, int> = Flow.map (fun x -> x * 2)
 
 // Keep only matching items
 let evens : Flow<int, int> = Flow.filter (fun x -> x % 2 = 0)
+
+// Group items into arrays of at most N
+let inPairsOf3 : Flow<int, int[]> = Flow.batch 3
 ```
 
 ### Composing flows
@@ -178,6 +181,14 @@ let doubledEvens : Flow<int, int> =
 ```
 
 Composition is lazy — no work happens until the stream is consumed.
+
+> **Operator scope:** `>>>` is defined inside `module Flow` and is
+> available when that module is open. When calling from a context where
+> the module is not open, use `Flow.compose` directly:
+>
+> ```fsharp
+> let flow = Flow.compose (Flow.map (fun x -> x * 2)) (Flow.filter (fun x -> x % 2 = 0))
+> ```
 
 ### Connecting source, flow, and sink
 
@@ -380,6 +391,85 @@ The enricher signature is `'T -> Result<'TOut, ErrorKind>`, making
 > `validate` is a special case of `enrich` where `'T = 'TOut` — it keeps
 > the shape, only the record's worthiness is in question. Use `validate`
 > when you are checking; use `enrich` when you are transforming.
+
+---
+
+## `Flow.batch`
+
+`Flow.batch` groups a stream of individual items into a stream of
+fixed-size arrays. It is a pure structural transform — it needs no
+`ExecutionContext` and emits no diagnostics.
+
+```fsharp
+// Groups items into arrays of at most 100
+let flow : Flow<Row, Row[]> = Flow.batch 100
+```
+
+### Behaviour
+
+| Scenario | Result |
+|---|---|
+| 9 items, batchSize 3 | Three arrays of `[3; 3; 3]` |
+| 10 items, batchSize 3 | Three full + one partial: `[3; 3; 3; 1]` |
+| 2 items, batchSize 100 | One array of `[2]` |
+| 0 items | Empty stream — no arrays emitted |
+| batchSize 1 | One array per item |
+| batchSize < 1 | `ArgumentException` thrown immediately |
+
+**The partial last batch is always emitted.** Records are never silently
+dropped because the final group is smaller than `batchSize`.
+
+### Using `ctx.BatchSize`
+
+`BatchSize` is a first-class field on `ExecutionContext` for exactly
+this purpose. Pass it directly to respect the pipeline's configured
+batch size:
+
+```fsharp
+let flow = Flow.batch ctx.BatchSize
+```
+
+This keeps the batch size in one place — the context — rather than
+hard-coding it at each call site.
+
+### Output type: `'T[]`
+
+`batch` emits `'T[]` (array), not `'T list` or `seq<'T>`. Arrays are:
+
+- **Fixed-size** — the sink knows exactly how many records it received
+- **Contiguous** — optimal for bulk-insert APIs (SQL `SqlBulkCopy`,
+  `IDataReader`, etc.)
+- **Efficient** — `ResizeArray` is used internally; `ToArray()` is a
+  single allocation per batch
+
+`'T list` would be equally safe but adds an allocation and a traversal
+for callers that need to hand the batch to a .NET API expecting an array.
+
+### Composing `batch` with other flows
+
+Because the output type changes from `'T` to `'T[]`, `batch` is
+typically the **last** flow in a composed pipeline:
+
+```fsharp
+// validate, then enrich, then group into batches for bulk insert
+let flow =
+    Flow.compose
+        (Flow.validate "check" ctx validator)
+        (Flow.compose
+            (Flow.enrich "enrich" ctx enricher)
+            (Flow.batch ctx.BatchSize))
+```
+
+A sink that processes `'T[]` directly handles the batch as a unit:
+
+```fsharp
+let bulkSink : Sink<Row[]> = {
+    Write = fun batches -> task {
+        for batch in batches do
+            do! db.BulkInsertAsync(batch)
+    }
+}
+```
 
 ---
 
