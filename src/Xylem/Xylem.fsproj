@@ -8,6 +8,7 @@
   <ItemGroup>
     <Compile Include="Domain.fs" />
     <Compile Include="InMemory.fs" />
+    <Compile Include="File.fs" />
     <None Include="Sandbox.fsx" />
   </ItemGroup>
 

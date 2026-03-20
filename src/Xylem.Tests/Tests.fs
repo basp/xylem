@@ -690,6 +690,146 @@ let ``InMemory source and sink round-trip a full pipeline`` () = task {
     Assert.Equal<int list>([2; 4], read ())
 }
 
+// ---------------------------------------------------------------------------
+// Connectors.File — helpers
+// ---------------------------------------------------------------------------
+
+/// Reads all lines written to a <c>StringWriter</c>, mirroring how
+/// <c>TextReader.ReadLine</c> works in <c>File.sourceFrom</c>.
+let readWrittenLines (sw: System.IO.StringWriter) =
+    use reader = new System.IO.StringReader(sw.ToString())
+    seq {
+        let mutable line = reader.ReadLine()
+        while not (isNull line) do
+            yield line
+            line <- reader.ReadLine()
+    } |> List.ofSeq
+
+// ---------------------------------------------------------------------------
+// Connectors.File — sourceFrom
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``File sourceFrom yields all lines`` () = task {
+    let source = File.sourceFrom (fun () -> new System.IO.StringReader("alice\nbob\ncarol"))
+
+    let! lines = source.Read() |> TaskSeq.toListAsync
+
+    Assert.Equal<string list>(["alice"; "bob"; "carol"], lines)
+}
+
+[<Fact>]
+let ``File sourceFrom preserves empty lines`` () = task {
+    let source = File.sourceFrom (fun () -> new System.IO.StringReader("first\n\nthird"))
+
+    let! lines = source.Read() |> TaskSeq.toListAsync
+
+    Assert.Equal<string list>(["first"; ""; "third"], lines)
+}
+
+[<Fact>]
+let ``File sourceFrom empty content yields empty stream`` () = task {
+    let source = File.sourceFrom (fun () -> new System.IO.StringReader(""))
+
+    let! lines = source.Read() |> TaskSeq.toListAsync
+
+    Assert.Empty(lines)
+}
+
+[<Fact>]
+let ``File sourceFrom Read called twice calls factory twice`` () = task {
+    let mutable callCount = 0
+    let source = File.sourceFrom (fun () ->
+        callCount <- callCount + 1
+        new System.IO.StringReader("x\ny") :> System.IO.TextReader)
+
+    let! first  = source.Read() |> TaskSeq.toListAsync
+    let! second = source.Read() |> TaskSeq.toListAsync
+
+    Assert.Equal(2, callCount)
+    Assert.Equal<string list>(first, second)
+}
+
+[<Fact>]
+let ``File sourceFrom factory throwing surfaces as Fatal in PipelineResult`` () = task {
+    let ctx    = ExecutionContext.``default`` ()
+    let source : Source<string> = File.sourceFrom (fun () -> failwith "cannot open file")
+    let flow   = Flow.map id
+    let sink, _ = collectSink<string>()
+
+    let! result = Pipeline.runWithContext ctx source flow sink
+
+    Assert.Equal(1L, result.RecordsFailed)
+    Assert.Equal(Fatal, result.Events[0].Severity)
+}
+
+// ---------------------------------------------------------------------------
+// Connectors.File — sinkFrom
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``File sinkFrom writes all strings as lines`` () = task {
+    let sw   = new System.IO.StringWriter()
+    let sink = File.sinkFrom (fun () -> sw :> System.IO.TextWriter)
+
+    do! sink.Write(taskSeq { yield "line1"; yield "line2"; yield "line3" })
+
+    Assert.Equal<string list>(["line1"; "line2"; "line3"], readWrittenLines sw)
+}
+
+[<Fact>]
+let ``File sinkFrom empty stream writes nothing`` () = task {
+    let sw   = new System.IO.StringWriter()
+    let sink = File.sinkFrom (fun () -> sw :> System.IO.TextWriter)
+
+    do! sink.Write(TaskSeq.empty)
+
+    Assert.Empty(readWrittenLines sw)
+}
+
+[<Fact>]
+let ``File sourceFrom and sinkFrom round-trip all lines`` () = task {
+    let lines = ["alpha"; "beta"; "gamma"]
+    let sw    = new System.IO.StringWriter()
+    let sink  = File.sinkFrom (fun () -> sw :> System.IO.TextWriter)
+    do! sink.Write(taskSeq { for l in lines do yield l })
+
+    let source = File.sourceFrom (fun () -> new System.IO.StringReader(sw.ToString()))
+    let! result = source.Read() |> TaskSeq.toListAsync
+
+    Assert.Equal<string list>(lines, result)
+}
+
+// ---------------------------------------------------------------------------
+// Connectors.File — integration
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``File sourceFrom and sinkFrom round-trip through a flow`` () = task {
+    let ctx    = ExecutionContext.``default`` ()
+    let source = File.sourceFrom (fun () -> new System.IO.StringReader("1\n2\nbad\n3"))
+    let sw     = new System.IO.StringWriter()
+    let sink   = File.sinkFrom (fun () -> sw :> System.IO.TextWriter)
+    let flow =
+        Flow.compose
+            (Flow.enrich "parse-int" ctx (fun (line: string) ->
+                match Int32.TryParse(line) with
+                | true, n -> Ok n
+                | _       -> Result.Error (ValidationError("line", $"'{line}' is not an integer"))))
+            (Flow.map string)
+
+    let! result = Pipeline.runWithContext ctx source flow sink
+
+    Assert.Equal(4L, result.RecordsRead)
+    Assert.Equal(3L, result.RecordsAccepted)
+    Assert.Equal(1L, result.RecordsRejected)
+    Assert.Equal<string list>(["1"; "2"; "3"], readWrittenLines sw)
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostics
+// ---------------------------------------------------------------------------
+
 [<Fact>]
 let ``DiagnosticEvent can be constructed for each Severity`` () =
     let severities = [ Info; Warning; Error; Fatal ]
