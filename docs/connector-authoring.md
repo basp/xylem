@@ -294,7 +294,9 @@ handles that:
   and records a `Fatal` pulse in the `Harvest`.
 - **Per-record failures** (e.g. a malformed row) — handle these in a
   `Vessel` using `Vessel.validate` or `Vessel.enrich`, not in the
-  connector. See the [error handling guide](error-handling.md).
+  connector. See the [error handling guide](error-handling.md). For
+  the core type definitions (`Root`, `Leaf`, `Vessel`), see
+  [core types](core-types.md).
 
 If your source encounters a recoverable error mid-stream (e.g. a
 transient network hiccup), you have two options:

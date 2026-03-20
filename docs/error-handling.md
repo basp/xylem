@@ -99,6 +99,8 @@ Pick the `ErrorKind` case that best describes what went wrong:
 | `PipelineError (stage, exn)` | A stage-level infrastructure error |
 | `Custom (tag, data)` | Domain-specific errors that don't fit the above |
 
+For the full type definitions, see [diagnostics](diagnostics.md).
+
 `Custom` is the extension point — use it freely for domain-specific
 error categories without modifying the library:
 
