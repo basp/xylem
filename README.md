@@ -114,7 +114,7 @@ transforms, and first connectors are implemented and covered by ~70 passing test
 
 ### What's next
 
-- ⬜ Basic retry policy
+- ✅ Basic retry policy (with thread-safe diagnostics)
 - ⬜ Simple routing / branching
 - ⬜ Per-stage diagnostic summaries
 - ⬜ JSON and CSV connectors

@@ -95,6 +95,10 @@ module Domain =
         /// Custom error with tag and data payload.
         /// </summary>
         | Custom                of tag: string * data: Map<string, string>
+        /// <summary>
+        /// A retry attempt failed. Carries the 1-based attempt number and the exception.
+        /// </summary>
+        | RetryError            of attempt: int * exn
 
     /// <summary>
     /// A single structured event emitted during a pipeline run.
@@ -127,6 +131,20 @@ module Domain =
     }
 
     /// <summary>
+    /// Controls how the pipeline retries on failure.
+    /// <c>NoRetry</c> means failures are immediately final.
+    /// <c>FixedDelay</c> retries up to <c>maxAttempts</c> times with a constant delay between attempts.
+    /// </summary>
+    type RetryPolicy =
+        /// <summary>No retries — a failure is immediately final.</summary>
+        | NoRetry
+        /// <summary>
+        /// Retry up to <c>maxAttempts</c> times with a constant <c>delay</c> between attempts.
+        /// The total number of executions is <c>maxAttempts + 1</c> (initial + retries).
+        /// </summary>
+        | FixedDelay of maxAttempts: int * delay: TimeSpan
+
+    /// <summary>
     /// Coordinates a single pipeline run: configuration, cancellation, and diagnostic emission.
     /// Create via <c>ExecutionContext.create</c> or <c>ExecutionContext.default</c>.
     /// </summary>
@@ -142,6 +160,8 @@ module Domain =
         Emit:              DiagnosticEvent -> unit
         /// <summary>Returns all events emitted so far in this run, in emission order.</summary>
         ReadEvents:        unit -> DiagnosticEvent list
+        /// <summary>Retry policy for the pipeline run. Defaults to <c>NoRetry</c>.</summary>
+        RetryPolicy:       RetryPolicy
     }
 
     /// <summary>
@@ -181,14 +201,17 @@ module ExecutionContext =
     /// <summary>
     /// Creates a new <c>ExecutionContext</c> for a single pipeline run.
     /// All events emitted via <c>Emit</c> are readable via <c>ReadEvents</c>.
+    /// <c>Emit</c> is thread-safe: concurrent calls are serialised via a lock
+    /// and emission order is preserved.
     /// </summary>
     let create (token: System.Threading.CancellationToken) (batchSize: int) : ExecutionContext =
         let events = ResizeArray<DiagnosticEvent>()
+        let gate   = obj ()
         { CancellationToken = token
           BatchSize         = batchSize
-          // NOTE: This `Emit` is currently not thread-safe.
-          Emit              = fun e -> events.Add(e)
-          ReadEvents        = fun () -> List.ofSeq events }
+          Emit              = fun e -> lock gate (fun () -> events.Add(e))
+          ReadEvents        = fun () -> lock gate (fun () -> List.ofSeq events)
+          RetryPolicy       = NoRetry }
 
     /// <summary>
     /// Creates an <c>ExecutionContext</c> with <c>CancellationToken.None</c> and
@@ -364,6 +387,10 @@ module Pipeline =
     /// Any unhandled exception (e.g. a connector I/O failure) is caught, emitted
     /// as a <c>Fatal</c> diagnostic event, and the function returns a well-formed
     /// <c>PipelineResult</c> reflecting the partial run rather than faulting the task.
+    /// When <c>ctx.RetryPolicy</c> is not <c>NoRetry</c>, the entire pipeline is
+    /// re-executed from scratch on failure, up to the configured number of attempts.
+    /// Each retry emits a <c>Warning</c>-level diagnostic event. If all retries are
+    /// exhausted, a <c>Fatal</c> event is emitted and the partial result is returned.
     /// </summary>
     let runWithContext
             (ctx:    ExecutionContext)
@@ -374,27 +401,52 @@ module Pipeline =
         task {
             ctx.CancellationToken.ThrowIfCancellationRequested()
             let sw    = System.Diagnostics.Stopwatch.StartNew()
-            let count = ref 0L
 
-            let countingSource : Source<'TIn> = {
-                Read = fun () ->
-                    source.Read()
-                    |> TaskSeq.map (fun item ->
-                        count.Value <- count.Value + 1L
-                        item)
-            }
+            let maxAttempts, delay =
+                match ctx.RetryPolicy with
+                | NoRetry                       -> 0, TimeSpan.Zero
+                | FixedDelay (maxAttempts, dly) -> maxAttempts, dly
 
-            try
-                do! runWith countingSource flow sink
-            with ex ->
-                ctx.Emit {
-                    Severity    = Severity.Fatal
-                    Kind        = ErrorKind.SystemError ex
-                    Stage       = None
-                    RecordIndex = None
-                    Timestamp   = DateTimeOffset.UtcNow
-                    Message     = $"Pipeline failed with unhandled exception: {ex.Message}"
+            let mutable attempt   = 0
+            let mutable succeeded = false
+            let count             = ref 0L
+
+            while not succeeded && attempt <= maxAttempts do
+                count.Value <- 0L
+
+                let countingSource : Source<'TIn> = {
+                    Read = fun () ->
+                        source.Read()
+                        |> TaskSeq.map (fun item ->
+                            count.Value <- count.Value + 1L
+                            item)
                 }
+
+                try
+                    do! runWith countingSource flow sink
+                    succeeded <- true
+                with ex ->
+                    if attempt < maxAttempts then
+                        ctx.Emit {
+                            Severity    = Severity.Warning
+                            Kind        = ErrorKind.RetryError (attempt + 1, ex)
+                            Stage       = None
+                            RecordIndex = None
+                            Timestamp   = DateTimeOffset.UtcNow
+                            Message     = $"Attempt {attempt + 1} failed: {ex.Message}. Retrying in {delay.TotalMilliseconds}ms…"
+                        }
+                        do! Task.Delay(delay, ctx.CancellationToken)
+                    else
+                        ctx.Emit {
+                            Severity    = Severity.Fatal
+                            Kind        = ErrorKind.RetryError (attempt + 1, ex)
+                            Stage       = None
+                            RecordIndex = None
+                            Timestamp   = DateTimeOffset.UtcNow
+                            Message     = $"Pipeline failed after {attempt + 1} attempt(s): {ex.Message}"
+                        }
+
+                    attempt <- attempt + 1
 
             sw.Stop()
             return PipelineResult.fromEvents count.Value sw.Elapsed (ctx.ReadEvents())

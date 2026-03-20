@@ -1,4 +1,4 @@
 ﻿## Notes
-* Reconsider the `Emit` signature, for example use `DiagnosticEvent -> Task<unit>` instead.
-* Reconsider the `Emit` implementation (in the `create` function) and the implications of it currently not being thread-safe.
+* ~~Reconsider the `Emit` signature, for example use `DiagnosticEvent -> Task<unit>` instead.~~ → **Resolved: kept synchronous.** Async Emit would infect every call site with `do!` for no current benefit. If v2 needs async emission (e.g. streaming to an external sink), add an `EmitAsync` field alongside `Emit` without breaking changes.
+* ~~Reconsider the `Emit` implementation (in the `create` function) and the implications of it currently not being thread-safe.~~ → **Resolved: Emit is now thread-safe** via `lock` on the backing `ResizeArray`, preserving emission order.
 * `validate` and `enrich` share nearly identical structure — only the type signature and message differ. If a third ctx-aware combinator emerges, it's worth extracting the shared iteration into a private helper.

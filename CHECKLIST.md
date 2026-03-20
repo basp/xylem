@@ -30,7 +30,7 @@
 ### 4. Basic execution engine
 - [x] Async linear pipeline run (`Task<_>`)
 - [x] Cancellation support
-- [ ] Basic retry policy
+- [x] Basic retry policy
 - [x] Deterministic stage ordering
 
 ### 5. Basic transforms

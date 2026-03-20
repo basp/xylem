@@ -22,6 +22,7 @@ let ``ErrorKind cases are all pattern-matchable`` () =
         BusinessRuleViolation("MAX_ORDER_LINES", "exceeded limit of 100")
         PipelineError("validate-stage", exn)
         Custom("my-domain-error", Map.ofList ["key", "value"])
+        RetryError(1, exn)
     ]
     let labels =
         kinds |> List.map (fun k ->
@@ -31,9 +32,10 @@ let ``ErrorKind cases are all pattern-matchable`` () =
             | ValidationError _       -> "validation"
             | BusinessRuleViolation _ -> "business"
             | PipelineError _         -> "pipeline"
-            | Custom _                -> "custom")
+            | Custom _                -> "custom"
+            | RetryError _            -> "retry")
     Assert.Equal<string list>(
-        ["system"; "io"; "validation"; "business"; "pipeline"; "custom"],
+        ["system"; "io"; "validation"; "business"; "pipeline"; "custom"; "retry"],
         labels)
 
 [<Fact>]
