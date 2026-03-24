@@ -371,14 +371,13 @@ do! leaf.Write(items)
 let json = System.Text.Encoding.UTF8.GetString(ms.ToArray())
 ```
 
-> [!NOTE]
-> `sinkFrom` disposes the stream the factory produces (via `use`). If you
+> **Note**: `sinkFrom` disposes the stream the factory produces (via `use`). If you
 > hold a reference to the same `MemoryStream` outside the factory, accessing
 > it via `Position` or `Read` after `Write` returns will throw
 > `ObjectDisposedException`. `MemoryStream.ToArray()` copies the internal
 > buffer and is safe to call after disposal — use it to inspect the output.
 > For a fuller explanation of this ownership rule, see
-> [Resource management](connector-authoring.md#resource-management) in the
+> [resource management](connector-authoring.md#resource-management) in the
 > connector authoring guide.
 
 ### `Json.source`
@@ -391,9 +390,8 @@ type Person = { Id: int; Name: string }
 let root : Root<Person> = Json.source<Person> "people.json"
 ```
 
-> [!IMPORTANT]
-> **JSON Format Requirement**
-> `Json.source` assumes the input file contains a **single JSON array** at the root (e.g., `[{ "id": 1 }, { "id": 2 }]`). It does not support "JSON Lines" (JSONL) or files containing multiple loose JSON objects. The file must start with `[` and end with `]`.
+> **JSON Format Requirement**:
+> `Json.source` assumes the input file contains a **single JSON array** at the root (e.g., `[{ "id": 1 }, { "id": 2 }]`). It does not support "JSON Lines" (JSONL) or files containing multiple loose JSON objects. Basically: the file must start with `[` and end with `]`.
 
 The file is read as an `IAsyncEnumerable` via `JsonSerializer.DeserializeAsyncEnumerable`,
 so the entire file is never fully loaded into memory.

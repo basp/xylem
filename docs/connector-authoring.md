@@ -336,7 +336,6 @@ let sinkFrom (factory: unit -> TextWriter) : Leaf<string> = {
 This guarantees cleanup even when the consumer cancels mid-stream or an
 exception is thrown.
 
-> [!NOTE]
 > **Stream ownership — the factory is a transfer of ownership, not a shared handle.**
 >
 > When you pass `fun () -> someStream` to `sourceFrom` or `sinkFrom`, you are
