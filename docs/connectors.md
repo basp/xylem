@@ -350,6 +350,10 @@ type Person = { Id: int; Name: string }
 let root : Root<Person> = Json.source<Person> "people.json"
 ```
 
+> [!IMPORTANT]
+> **JSON Format Requirement**
+> `Json.source` assumes the input file contains a **single JSON array** at the root (e.g., `[{ "id": 1 }, { "id": 2 }]`). It does not support "JSON Lines" (JSONL) or files containing multiple loose JSON objects. The file must start with `[` and end with `]`.
+
 The file is read as an `IAsyncEnumerable` via `JsonSerializer.DeserializeAsyncEnumerable`,
 so the entire file is never fully loaded into memory.
 

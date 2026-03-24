@@ -98,3 +98,19 @@ let ``Full pipeline with Json source and sink`` () = task {
         if File.Exists(sourcePath) then File.Delete(sourcePath)
         if File.Exists(sinkPath) then File.Delete(sinkPath)
 }
+
+[<Fact>]
+let ``Json source fails with JsonException when given JSON Lines instead of an array`` () = task {
+    let path = Path.GetTempFileName()
+    // JSONL (JSON Lines) format - two separate JSON objects on separate lines
+    let jsonl = "{\"Id\":1, \"Name\":\"Alice\"}\n{\"Id\":2, \"Name\":\"Bob\"}"
+    File.WriteAllText(path, jsonl)
+
+    try
+        let root = Json.source<Person> path
+        let! ex = Assert.ThrowsAsync<AggregateException>(fun () -> root.Read() |> TaskSeq.toListAsync :> System.Threading.Tasks.Task)
+        Assert.IsType<JsonException>(ex.InnerException) |> ignore
+        ()
+    finally
+        if File.Exists(path) then File.Delete(path)
+}

@@ -30,9 +30,13 @@ module JsonLeafOptions =
 
 /// <summary>
 /// JSON connectors for reading and writing records.
-/// Note: Reading assumes a JSON array of objects or individual JSON objects per line (JSONL).
-/// This implementation handles a JSON array of objects.
 /// </summary>
+/// <remarks>
+/// <ul>
+/// <li>Reading assumes a JSON array of objects.</li>
+/// <li>This implementation handles a single JSON array at the root of the file.</li>
+/// </ul>
+/// </remarks>
 module Json =
 
     /// <summary>
