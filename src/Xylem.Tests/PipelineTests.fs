@@ -5,7 +5,7 @@ open System.Threading
 open FSharp.Control
 open Xunit
 open Xylem
-open Xylem.Domain
+open Xylem.Biome
 
 // ---------------------------------------------------------------------------
 // Pipeline.run

@@ -3,7 +3,7 @@ module RingTests
 open System
 open Xunit
 open Xylem
-open Xylem.Domain
+open Xylem.Biome
 
 [<Fact>]
 let ``summarizeByStage returns empty list for no events`` () =

@@ -281,7 +281,7 @@ integration-tested separately as thin wrappers over `sourceFrom`/`sinkFrom`.
 ```fsharp
 open Xylem
 open Xylem.Connectors
-open Xylem.Domain
+open Xylem.Biome
 
 type Row = { Name: string; Age: int }
 

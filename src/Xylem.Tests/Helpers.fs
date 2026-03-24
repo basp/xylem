@@ -2,7 +2,7 @@ module Helpers
 
 open System
 open Xylem.Connectors
-open Xylem.Domain
+open Xylem.Biome
 
 /// <summary>Alias for the in-memory leaf — keeps test call-sites short.</summary>
 let collectSink<'T> () = InMemory.sink<'T> ()

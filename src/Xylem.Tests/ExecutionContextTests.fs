@@ -2,7 +2,7 @@ module ExecutionContextTests
 
 open Xunit
 open Xylem
-open Xylem.Domain
+open Xylem.Biome
 
 [<Fact>]
 let ``ExecutionContext default starts with no events`` () =

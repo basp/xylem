@@ -6,7 +6,7 @@ open System.Text.Json
 open FSharp.Control
 open Xunit
 open Xylem
-open Xylem.Domain
+open Xylem.Biome
 open Xylem.Connectors
 
 type Person = {

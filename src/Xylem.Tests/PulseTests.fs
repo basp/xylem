@@ -3,7 +3,7 @@ module PulseTests
 open System
 open Xunit
 open Xylem
-open Xylem.Domain
+open Xylem.Biome
 
 [<Fact>]
 let ``Pulse can be constructed for each Severity`` () =
@@ -21,7 +21,7 @@ let ``ErrorKind cases are all pattern-matchable`` () =
         ValidationError("Age", "must be >= 0")
         BusinessRuleViolation("MAX_ORDER_LINES", "exceeded limit of 100")
         PipelineError("validate-stage", exn)
-        Custom("my-domain-error", Map.ofList ["key", "value"])
+        Custom("my-biome-error", Map.ofList ["key", "value"])
         RetryError(1, exn)
     ]
     let labels =

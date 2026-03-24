@@ -4,7 +4,7 @@ open System
 open System.Collections.Generic
 open System.Threading.Tasks
 
-module Domain =
+module Biome =
 
     /// <summary>
     /// The origin of a data pipeline — absorbs records from the ground up.
@@ -74,7 +74,7 @@ module Domain =
     /// What went wrong — machine-readable and pattern-matchable.
     /// </summary>
     /// <remarks>
-    /// <p>Use <c>Custom</c> for domain-specific kinds without modifying the library.</p>
+    /// <p>Use <c>Custom</c> for biome-specific kinds without modifying the library.</p>
     /// <p>
     /// Note: adding a new well-known case is a breaking change by design,
     /// forcing callers to explicitly handle it.
@@ -239,7 +239,7 @@ module Domain =
 
 module ExecutionContext =
 
-    open Domain
+    open Biome
 
     /// <summary>
     /// Creates a new <c>ExecutionContext</c> for a single pipeline run.
@@ -274,7 +274,7 @@ module ExecutionContext =
 
 module Harvest =
 
-    open Domain
+    open Biome
 
     let empty = {
         RecordsRead     = 0L
@@ -347,7 +347,7 @@ module Harvest =
 
 module Vessel =
 
-    open Domain
+    open Biome
     open FSharp.Control
 
     /// <summary>
@@ -491,7 +491,7 @@ module Vessel =
 
 module Pipeline =
 
-    open Domain
+    open Biome
     open FSharp.Control
 
     /// <summary>

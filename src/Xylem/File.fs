@@ -3,7 +3,7 @@ namespace Xylem.Connectors
 open System.IO
 open System.Text
 open FSharp.Control
-open Xylem.Domain
+open Xylem.Biome
 
 /// <summary>
 /// Options controlling how <c>File.sink</c> writes to a file.

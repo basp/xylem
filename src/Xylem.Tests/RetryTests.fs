@@ -6,7 +6,7 @@ open System.Threading.Tasks
 open FSharp.Control
 open Xunit
 open Xylem
-open Xylem.Domain
+open Xylem.Biome
 
 // ---------------------------------------------------------------------------
 // NoRetry — preserves existing behaviour

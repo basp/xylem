@@ -3,7 +3,7 @@
 open System.IO
 open System.Text.Json
 open FSharp.Control
-open Xylem.Domain
+open Xylem.Biome
 
 /// <summary>
 /// Options controlling how <c>Json.sink</c> writes to a file.

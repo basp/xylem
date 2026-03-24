@@ -92,15 +92,15 @@ Pick the `ErrorKind` case that best describes what went wrong:
 | Case | When to use |
 |------|-------------|
 | `ValidationError (field, reason)` | A field-level check failed |
-| `BusinessRuleViolation (rule, reason)` | A domain rule was violated |
+| `BusinessRuleViolation (rule, reason)` | A biome rule was violated |
 | `IoError (path, exn)` | An I/O operation failed |
 | `SystemError exn` | An unexpected system-level error |
 | `PipelineError (stage, exn)` | A stage-level infrastructure error |
-| `Custom (tag, data)` | Domain-specific errors that don't fit the above |
+| `Custom (tag, data)` | Biome-specific errors that don't fit the above |
 
 For the full type definitions, see [diagnostics](diagnostics.md).
 
-`Custom` is the extension point — use it freely for domain-specific
+`Custom` is the extension point — use it freely for biome-specific
 error categories without modifying the library:
 
 ```fsharp
@@ -295,9 +295,9 @@ let summaries = Harvest.summarizeByStage result.Events
 // summaries[1] = { Stage = Some "add-label";   ErrorCount = ...; ... }
 ```
 
-### Custom error kinds for domain logic
+### Custom error kinds for biome logic
 
-Use `Custom` to carry domain-specific error data without modifying the
+Use `Custom` to carry biome-specific error data without modifying the
 library:
 
 ```fsharp
@@ -338,7 +338,7 @@ Before finalizing your pipeline's error handling strategy, verify:
 
 - [ ] **Distinguish record vs. pipeline errors**: Use `Vessel.validate` or `Vessel.enrich` for individual record rejections, and let infrastructure exceptions propagate to be caught as `Fatal` pulses.
 - [ ] **Choose the right `ErrorKind`**: Use specific cases like `ValidationError` or `BusinessRuleViolation` instead of generic strings to allow for easier pattern-matching.
-- [ ] **Leverage `Custom` errors**: For domain-specific failures that don't fit the standard categories, use `Custom(tag, data)` to carry structured diagnostic information.
+- [ ] **Leverage `Custom` errors**: For biome-specific failures that don't fit the standard categories, use `Custom(tag, data)` to carry structured diagnostic information.
 - [ ] **Configure Retry Policies**: Ensure `RetryPolicy` is explicitly set in the `ExecutionContext` if the pipeline needs to recover from transient failures.
 - [ ] **Handle the `Harvest`**: Check `result.RecordsFailed` and `result.RecordsRejected` after execution to decide if the run was successful or requires manual intervention.
 - [ ] **Inspect the `Pulse` stream**: Use `Harvest.summarizeByStage` or filter `result.Events` to identify which stages are producing the most errors.

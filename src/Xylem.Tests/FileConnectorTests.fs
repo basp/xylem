@@ -6,7 +6,7 @@ open FSharp.Control
 open Xunit
 open Xylem
 open Xylem.Connectors
-open Xylem.Domain
+open Xylem.Biome
 
 /// <summary>
 /// Reads all lines written to a <c>StringWriter</c>, mirroring how

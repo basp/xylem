@@ -37,7 +37,7 @@ handles, connections) lives inside the closure returned by `Read`.
 
 ```fsharp
 open FSharp.Control
-open Xylem.Domain
+open Xylem.Biome
 
 let mySource : Root<int> = {
     Read = fun () ->
@@ -126,7 +126,7 @@ namespace Xylem.Connectors
 open System.IO
 open System.Text
 open FSharp.Control
-open Xylem.Domain
+open Xylem.Biome
 
 /// Options controlling the sink.
 type MyLeafOptions = {

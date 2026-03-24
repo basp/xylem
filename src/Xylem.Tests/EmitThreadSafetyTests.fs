@@ -3,7 +3,7 @@ module EmitThreadSafetyTests
 open System.Threading.Tasks
 open Xunit
 open Xylem
-open Xylem.Domain
+open Xylem.Biome
 
 [<Fact>]
 let ``Concurrent Emit calls preserve all events`` () = task {

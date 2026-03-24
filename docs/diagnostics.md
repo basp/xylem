@@ -31,7 +31,7 @@ type Severity =
 
 The `ErrorKind` discriminated union describes *what went wrong*. The
 well-known cases are machine-readable and pattern-matchable; `Custom` is
-the extension point for domain-specific categories:
+the extension point for biome-specific categories:
 
 ```fsharp
 type ErrorKind =
@@ -52,7 +52,7 @@ other failures.
 > **Adding a new well-known case is intentionally a breaking change.**
 Exhaustive pattern matches will fail to compile, forcing every caller to
 explicitly handle the new category. `Custom` is the safety valve when
-you need a domain-specific kind without modifying the library.
+you need a biome-specific kind without modifying the library.
 
 ---
 

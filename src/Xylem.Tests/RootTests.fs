@@ -2,7 +2,7 @@ module RootTests
 
 open FSharp.Control
 open Xunit
-open Xylem.Domain
+open Xylem.Biome
 
 [<Fact>]
 let ``Root Read returns all yielded items`` () = task {

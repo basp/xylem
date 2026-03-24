@@ -1,7 +1,7 @@
 namespace Xylem.Connectors
 
 open FSharp.Control
-open Xylem.Domain
+open Xylem.Biome
 
 /// <summary>
 /// In-memory connectors for tests, examples, and simple one-off pipelines.
