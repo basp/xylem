@@ -99,6 +99,102 @@ let ``Full pipeline with Json source and sink`` () = task {
         if File.Exists(sinkPath) then File.Delete(sinkPath)
 }
 
+// ---------------------------------------------------------------------------
+// Json.sourceFrom
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``Json sourceFrom reads objects from a MemoryStream`` () = task {
+    let data = [ { Id = 1; Name = "Alice" }; { Id = 2; Name = "Bob" } ]
+    let bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data)
+    let root = Json.sourceFrom<Person> (fun () -> new MemoryStream(bytes) :> Stream)
+
+    let! result = root.Read() |> TaskSeq.toListAsync
+
+    Assert.Equal(2, result.Length)
+    Assert.Equal("Alice", result.[0].Name)
+    Assert.Equal("Bob", result.[1].Name)
+}
+
+[<Fact>]
+let ``Json sourceFrom calls factory on each Read`` () = task {
+    let data = [ { Id = 1; Name = "Alice" } ]
+    let bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data)
+    let mutable callCount = 0
+    let root = Json.sourceFrom<Person> (fun () ->
+        callCount <- callCount + 1
+        new MemoryStream(bytes) :> Stream)
+
+    let! first  = root.Read() |> TaskSeq.toListAsync
+    let! second = root.Read() |> TaskSeq.toListAsync
+
+    Assert.Equal(2, callCount)
+    Assert.Equal<string list>([first.[0].Name], [second.[0].Name])
+}
+
+// ---------------------------------------------------------------------------
+// Json.sinkFrom / Json.sinkFromDefault
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``Json sinkFrom writes objects as a JSON array to a MemoryStream`` () = task {
+    use ms = new MemoryStream()
+    let leaf = Json.sinkFrom<Person> (fun () -> ms :> Stream) JsonLeafOptions.Default
+    do! leaf.Write(taskSeq { yield { Id = 1; Name = "Alice" }; yield { Id = 2; Name = "Bob" } })
+
+    let json = System.Text.Encoding.UTF8.GetString(ms.ToArray())
+    let result = JsonSerializer.Deserialize<Person list>(json)
+
+    Assert.Equal(2, result.Length)
+    Assert.Equal("Alice", result.[0].Name)
+}
+
+[<Fact>]
+let ``Json sinkFrom respects WriteIndented option`` () = task {
+    use ms = new MemoryStream()
+    let options = { JsonLeafOptions.Default with WriteIndented = true }
+    let leaf = Json.sinkFrom<Person> (fun () -> ms :> Stream) options
+    do! leaf.Write(taskSeq { yield { Id = 1; Name = "Alice" } })
+
+    let json = System.Text.Encoding.UTF8.GetString(ms.ToArray())
+    Assert.Contains("\n", json.Replace("\r\n", "\n"))
+}
+
+[<Fact>]
+let ``Json sinkFromDefault writes objects as a JSON array to a MemoryStream`` () = task {
+    use ms = new MemoryStream()
+    let leaf = Json.sinkFromDefault<Person> (fun () -> ms :> Stream)
+    do! leaf.Write(taskSeq { yield { Id = 1; Name = "Alice" } })
+
+    let json = System.Text.Encoding.UTF8.GetString(ms.ToArray())
+    let result = JsonSerializer.Deserialize<Person list>(json)
+
+    Assert.Equal(1, result.Length)
+    Assert.Equal("Alice", result.[0].Name)
+}
+
+[<Fact>]
+let ``Json sourceFrom and sinkFrom round-trip`` () = task {
+    use ms = new MemoryStream()
+    let sink = Json.sinkFromDefault<Person> (fun () -> ms :> Stream)
+    do! sink.Write(taskSeq {
+        yield { Id = 1; Name = "Alice" }
+        yield { Id = 2; Name = "Bob" }
+    })
+
+    let bytes = ms.ToArray()
+    let source = Json.sourceFrom<Person> (fun () -> new MemoryStream(bytes) :> Stream)
+    let! result = source.Read() |> TaskSeq.toListAsync
+
+    Assert.Equal(2, result.Length)
+    Assert.Equal("Alice", result.[0].Name)
+    Assert.Equal("Bob", result.[1].Name)
+}
+
+// ---------------------------------------------------------------------------
+// Json source — existing tests
+// ---------------------------------------------------------------------------
+
 [<Fact>]
 let ``Json source fails with JsonException when given JSON Lines instead of an array`` () = task {
     let path = Path.GetTempFileName()

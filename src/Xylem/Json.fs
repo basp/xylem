@@ -40,13 +40,17 @@ module JsonLeafOptions =
 module Json =
 
     /// <summary>
-    /// Creates a root that reads a JSON array from the file at <c>path</c>.
+    /// Creates a <c>Root&lt;'T&gt;</c> from a <c>Stream</c> factory.
+    /// Each call to <c>Read ()</c> invokes <c>streamFactory</c> to get a fresh
+    /// readable <c>Stream</c>, deserialises a JSON array from it, and disposes
+    /// the stream when enumeration ends. Useful in tests by supplying a
+    /// <c>MemoryStream</c> factory.
     /// </summary>
-    let source<'T> (path: string) : Root<'T> = {
+    let sourceFrom<'T> (streamFactory: unit -> Stream) : Root<'T> = {
         Read = fun () ->
             taskSeq {
-                use stream = File.OpenRead(path)
-                let items : System.Collections.Generic.IAsyncEnumerable<'T> = 
+                use stream = streamFactory ()
+                let items : System.Collections.Generic.IAsyncEnumerable<'T> =
                     JsonSerializer.DeserializeAsyncEnumerable<'T>(stream)
                 for item in items do
                     yield item
@@ -54,20 +58,41 @@ module Json =
     }
 
     /// <summary>
-    /// Creates a leaf with custom options.
+    /// Creates a root that reads a JSON array from the file at <c>path</c>.
     /// </summary>
-    let sink<'T> (path: string) (options: JsonLeafOptions) : Leaf<'T> = {
+    let source<'T> (path: string) : Root<'T> =
+        sourceFrom<'T> (fun () -> File.OpenRead(path) :> Stream)
+
+    /// <summary>
+    /// Creates a <c>Leaf&lt;'T&gt;</c> from a <c>Stream</c> factory and options.
+    /// <c>Write</c> invokes <c>streamFactory</c> once, serialises each item into
+    /// a JSON array, then disposes the stream. Useful in tests by supplying a
+    /// <c>MemoryStream</c> factory.
+    /// </summary>
+    let sinkFrom<'T> (streamFactory: unit -> Stream) (options: JsonLeafOptions) : Leaf<'T> = {
         Write = fun stream -> task {
-            use fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None)
+            use fileStream = streamFactory ()
             let writerOptions = JsonWriterOptions(Indented = options.WriteIndented)
             use writer = new Utf8JsonWriter(fileStream, writerOptions)
-            
+
             writer.WriteStartArray()
             do! stream |> TaskSeq.iter (fun item -> JsonSerializer.Serialize(writer, item))
             writer.WriteEndArray()
             do! writer.FlushAsync()
         }
     }
+
+    /// <summary>
+    /// Creates a <c>Leaf&lt;'T&gt;</c> from a <c>Stream</c> factory using default options.
+    /// </summary>
+    let sinkFromDefault<'T> (streamFactory: unit -> Stream) : Leaf<'T> =
+        sinkFrom<'T> streamFactory JsonLeafOptions.Default
+
+    /// <summary>
+    /// Creates a leaf with custom options.
+    /// </summary>
+    let sink<'T> (path: string) (options: JsonLeafOptions) : Leaf<'T> =
+        sinkFrom<'T> (fun () -> new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None) :> Stream) options
 
     /// <summary>
     /// Creates a leaf with default options.
