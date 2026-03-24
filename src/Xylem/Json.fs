@@ -40,9 +40,9 @@ module JsonLeafOptions =
 module Json =
 
     /// <summary>
-    /// Creates a <c>Root&lt;'T&gt;</c> from a <c>Stream</c> factory.
+    /// Creates a root from a <c>Stream</c> factory.
     /// Each call to <c>Read ()</c> invokes <c>streamFactory</c> to get a fresh
-    /// readable <c>Stream</c>, deserialises a JSON array from it, and disposes
+    /// readable <c>Stream</c>, deserializes a JSON array from it, and disposes
     /// the stream when enumeration ends. Useful in tests by supplying a
     /// <c>MemoryStream</c> factory.
     /// </summary>
@@ -64,8 +64,8 @@ module Json =
         sourceFrom<'T> (fun () -> File.OpenRead(path) :> Stream)
 
     /// <summary>
-    /// Creates a <c>Leaf&lt;'T&gt;</c> from a <c>Stream</c> factory and options.
-    /// <c>Write</c> invokes <c>streamFactory</c> once, serialises each item into
+    /// Creates a leaf from a <c>Stream</c> factory and options.
+    /// <c>Write</c> invokes <c>streamFactory</c> once, serializes each item into
     /// a JSON array, then disposes the stream. Useful in tests by supplying a
     /// <c>MemoryStream</c> factory.
     /// </summary>
@@ -83,7 +83,7 @@ module Json =
     }
 
     /// <summary>
-    /// Creates a <c>Leaf&lt;'T&gt;</c> from a <c>Stream</c> factory using default options.
+    /// Creates a leaf from a <c>Stream</c> factory using default options.
     /// </summary>
     let sinkFromDefault<'T> (streamFactory: unit -> Stream) : Leaf<'T> =
         sinkFrom<'T> streamFactory JsonLeafOptions.Default
