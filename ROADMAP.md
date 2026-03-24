@@ -9,10 +9,10 @@ The roadmap is optimized for:
 
 ---
 
-# v1 — Foundation release
+# v1 — Foundation release (Complete)
 
 ## Objective
-Deliver a **reliable, composable ETL core** that can run real pipelines with strong diagnostics and predictable behavior.
+Deliver a **reliable, composable ETL core** that can run real pipelines with strong diagnostics and predictable behavior. (Delivered)
 
 ## Core outcomes
 By the end of v1, users should be able to:
@@ -233,20 +233,20 @@ Still avoid overbuilding too early:
 
 # Suggested sequencing
 
-## Phase 1: v1.0 core
+## Phase 1: v1.0 core (Done)
 - core types
 - simple execution engine
 - diagnostics
 - file-based connectors
 - tests and docs
 
-## Phase 2: v1.1 hardening
+## Phase 2: v1.1 hardening (In progress)
 - polish diagnostics
 - improve error messages
 - add more examples
 - tighten edge cases
 
-## Phase 3: v2.0 expansion
+## Phase 3: v2.0 expansion (Planned)
 - branching and sub-pipelines
 - checkpointing
 - contract/schema support

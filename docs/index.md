@@ -27,6 +27,15 @@ stream), `Vessel<'TIn,'TOut>` (lazy stream transform), and `Leaf<'T>`
 with `>>>`, and how `Pipeline.run` / `Pipeline.runWith` wire them
 together.
 
+### [Pipelines](pipelines.md)
+
+How `Pipeline.runWithContext` executes a full Root → Vessel → Leaf
+chain. Covers record counting, wall-clock timing, the guaranteed
+`Harvest` on failure, and how unhandled exceptions are captured as
+`Fatal` diagnostics rather than faulting the task.
+
+---
+
 ### [Diagnostics](diagnostics.md)
 
 Xylem's structured diagnostic model. Defines `Severity` (Info through
@@ -42,13 +51,6 @@ carrying cancellation tokens, batch size, diagnostic emission, and
 retry policy. Also covers context-aware vessel combinators:
 `Vessel.validate` (check records), `Vessel.enrich` (transform with
 possible rejection), and `Vessel.batch` (group into fixed-size arrays).
-
-### [Pipelines](pipelines.md)
-
-How `Pipeline.runWithContext` executes a full Root → Vessel → Leaf
-chain. Covers record counting, wall-clock timing, the guaranteed
-`Harvest` on failure, and how unhandled exceptions are captured as
-`Fatal` diagnostics rather than faulting the task.
 
 ### [Error Handling](error-handling.md)
 
@@ -67,11 +69,11 @@ during retries, and cancellation behaviour between attempts.
 
 ### [Connectors](connectors.md)
 
-The two built-in connectors: `InMemory` (lists and arrays — ideal for
-tests) and `File` (line-oriented local file I/O). Covers factory
-constructors for testability, `FileLeafOptions`, resource lifetime,
-testing without I/O via `StringReader`/`StringWriter`, and full
-pipeline examples.
+The three built-in connectors: `InMemory` (lists and arrays — ideal for
+tests), `File` (line-oriented local file I/O), and `Json` (structured
+JSON array files). Covers factory constructors for testability,
+`FileLeafOptions`, `JsonLeafOptions`, resource lifetime, testing without
+I/O, and full pipeline examples.
 
 ### [Connector Authoring](connector-authoring.md)
 

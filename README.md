@@ -135,12 +135,12 @@ Every pipeline run produces structured `Pulse` values with severity levels
 timestamps. Counts for read, accepted, rejected, and failed items are a simple fold
 over the event stream. Per-stage summaries are available via `Ring` values.
 
-## 🚧 Current status
+## 🚧 Status
 
-Xylem is **mid-v1** — the core pipeline model, execution engine, diagnostics, basic
-transforms, and first connectors are implemented and covered by 83 passing tests.
+Xylem **v1 is complete** — the core pipeline model, execution engine, diagnostics, basic
+transforms, and essential connectors are implemented and verified.
 
-### ✅ What's done
+### ✅ What's done (v1)
 
 - ✅ Core domain model (`Root`, `Vessel`, `Leaf`, `Pipeline`, `ExecutionContext`, `Harvest`)
 - ✅ Structured diagnostics (`Pulse`, `Ring`) with severity, error kinds, and timing
@@ -151,13 +151,16 @@ transforms, and first connectors are implemented and covered by 83 passing tests
 - ✅ File connector (line-oriented read/write)
 - ✅ JSON connector (array-based read/write)
 - ✅ Integration, diagnostics, and failure-path tests
+- ✅ Error handling and connector authoring guides
 
-### 📅 What's next
+### 📅 What's next (v2)
 
-- ⬜ Error handling and connector authoring guides
-- ⬜ CSV connector (nice-to-have)
+- ⬜ Advanced pipeline topology (branching, fan-out/in)
+- ⬜ Resilience features (checkpointing, resume)
+- ⬜ Schema and contract support
+- ⬜ Expanded connectors (CSV, Databases, HTTP)
 
-See [ROADMAP.md](ROADMAP.md) for the full v1 and v2 plan, and
+See [ROADMAP.md](ROADMAP.md) for the full v2 plan, and
 [CHECKLIST.md](CHECKLIST.md) for detailed progress tracking.
 
 ## 📏 Guidelines
