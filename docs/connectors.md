@@ -340,6 +340,47 @@ to deserialise and serialise records.
 open Xylem.Connectors
 ```
 
+### `Json.sourceFrom` and `Json.sinkFrom` — factory constructors
+
+Like the `File` connector, `Json` exposes factory-based constructors for
+testability:
+
+```fsharp
+Json.sourceFrom : (unit -> Stream) -> Root<'T>
+Json.sinkFrom   : (unit -> Stream) -> JsonLeafOptions -> Leaf<'T>
+Json.sinkFromDefault : (unit -> Stream) -> Leaf<'T>
+```
+
+`source` and `sink` delegate to these, supplying a `FileStream` factory.
+
+### Testing without I/O
+
+Inject a `MemoryStream` factory to avoid touching the file system:
+
+```fsharp
+// Source — bytes already in memory
+let bytes = JsonSerializer.SerializeToUtf8Bytes(data)
+let root = Json.sourceFrom<Person> (fun () -> new MemoryStream(bytes))
+
+// Sink — capture what was written
+use ms = new MemoryStream()
+let leaf = Json.sinkFromDefault<Person> (fun () -> ms :> Stream)
+do! leaf.Write(items)
+
+// ⚠ ms is disposed after Write returns — use ToArray(), not Position/Read
+let json = System.Text.Encoding.UTF8.GetString(ms.ToArray())
+```
+
+> [!NOTE]
+> `sinkFrom` disposes the stream the factory produces (via `use`). If you
+> hold a reference to the same `MemoryStream` outside the factory, accessing
+> it via `Position` or `Read` after `Write` returns will throw
+> `ObjectDisposedException`. `MemoryStream.ToArray()` copies the internal
+> buffer and is safe to call after disposal — use it to inspect the output.
+> For a fuller explanation of this ownership rule, see
+> [Resource management](connector-authoring.md#resource-management) in the
+> connector authoring guide.
+
 ### `Json.source`
 
 Creates a `Root<'T>` that reads a JSON array from a file. Each element

@@ -336,6 +336,36 @@ let sinkFrom (factory: unit -> TextWriter) : Leaf<string> = {
 This guarantees cleanup even when the consumer cancels mid-stream or an
 exception is thrown.
 
+> [!NOTE]
+> **Stream ownership — the factory is a transfer of ownership, not a shared handle.**
+>
+> When you pass `fun () -> someStream` to `sourceFrom` or `sinkFrom`, you are
+> handing the connector exclusive ownership of every object the factory
+> produces. The connector opens the resource, uses it for the duration of the
+> operation, and disposes it — after which the object is gone. If your test
+> code also holds a reference to that same object (e.g. `use ms = new
+> MemoryStream()` passed in via the factory), you will see an
+> `ObjectDisposedException` the moment you try to seek or read from it after
+> `Write` returns.
+>
+> The idiomatic fix depends on what you need:
+>
+> - **Capture the data before disposal** — read from the stream *inside* the
+>   factory, or arrange for the sink to write to a buffer you control via a
+>   separate channel (e.g. an `InMemory.sink`).
+> - **Use a post-disposal-safe API** — `MemoryStream.ToArray()` copies the
+>   internal buffer and works even after the stream is disposed. Prefer this
+>   in tests that need to inspect what a JSON or binary sink wrote.
+> - **Avoid sharing the reference at all** — if the factory always constructs
+>   a brand-new object (`fun () -> new MemoryStream()`), there is nothing to
+>   share and the question never arises. The pattern becomes a concern only
+>   when a pre-built object is *captured* by the factory closure.
+>
+> Short answer: you don't need to worry about this as long as the factory is
+> the *only* path to the resource. If you find yourself holding a reference
+> alongside the factory, use `ToArray()` (for `MemoryStream`) or read the
+> data out before handing ownership to the connector.
+
 ---
 
 ## Cancellation
