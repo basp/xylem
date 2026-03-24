@@ -19,7 +19,7 @@ let ``NoRetry succeeds normally`` () = task {
     let vessel   = Vessel.map id
     let leaf, read = Helpers.collectSink<int> ()
 
-    let! result = Pipeline.runWithContext ctx root vessel leaf
+    let! result = Conduit.runWithContext ctx root vessel leaf
 
     Assert.Equal(3L, result.RecordsRead)
     Assert.Equal(3L, result.RecordsAccepted)
@@ -33,7 +33,7 @@ let ``NoRetry emits Fatal on failure`` () = task {
     let vessel   = Vessel.map id
     let leaf   : Leaf<int> = { Write = fun _ -> failwith "boom" }
 
-    let! result = Pipeline.runWithContext ctx root vessel leaf
+    let! result = Conduit.runWithContext ctx root vessel leaf
 
     Assert.Equal(1L, result.RecordsFailed)
     let fatal = result.Events |> List.find (fun e -> e.Severity = Fatal)
@@ -62,7 +62,7 @@ let ``FixedDelay succeeds on second attempt`` () = task {
         }
     }
 
-    let! result = Pipeline.runWithContext ctx root vessel leaf
+    let! result = Conduit.runWithContext ctx root vessel leaf
 
     Assert.Equal(2, calls)
     Assert.Equal(0L, result.RecordsFailed)
@@ -86,7 +86,7 @@ let ``FixedDelay exhausts all retries and emits Fatal`` () = task {
         }
     }
 
-    let! result = Pipeline.runWithContext ctx root vessel leaf
+    let! result = Conduit.runWithContext ctx root vessel leaf
 
     Assert.Equal(3, calls) // 1 initial + 2 retries
     Assert.Equal(1L, result.RecordsFailed)
@@ -114,7 +114,7 @@ let ``FixedDelay respects cancellation between retries`` () = task {
 
     let mutable threw = false
     try
-        let! _ = Pipeline.runWithContext ctx root vessel leaf
+        let! _ = Conduit.runWithContext ctx root vessel leaf
         ()
     with
     | :? OperationCanceledException
@@ -137,7 +137,7 @@ let ``FixedDelay with zero maxAttempts behaves like NoRetry`` () = task {
         }
     }
 
-    let! result = Pipeline.runWithContext ctx root vessel leaf
+    let! result = Conduit.runWithContext ctx root vessel leaf
 
     Assert.Equal(1, calls)
     Assert.Equal(1L, result.RecordsFailed)

@@ -1,4 +1,4 @@
-module PipelineTests
+module ConduitTests
 
 open System
 open System.Threading
@@ -8,43 +8,43 @@ open Xylem
 open Xylem.Biome
 
 // ---------------------------------------------------------------------------
-// Pipeline.run
+// Conduit.run
 // ---------------------------------------------------------------------------
 
 [<Fact>]
-let ``Pipeline run passes root items to leaf`` () = task {
+let ``Conduit run passes root items to leaf`` () = task {
     let root : Root<int> = {
         Read = fun () -> taskSeq { yield 10; yield 20; yield 30 }
     }
     let leaf, read = Helpers.collectSink<int>()
 
-    do! Pipeline.run root leaf
+    do! Conduit.run root leaf
 
     Assert.Equal<int list>([10; 20; 30], read ())
 }
 
 [<Fact>]
-let ``Pipeline run with empty root results in empty leaf`` () = task {
+let ``Conduit run with empty root results in empty leaf`` () = task {
     let root : Root<int> = { Read = fun () -> TaskSeq.empty }
     let leaf, read = Helpers.collectSink<int>()
 
-    do! Pipeline.run root leaf
+    do! Conduit.run root leaf
 
     Assert.Empty(read ())
 }
 
 // ---------------------------------------------------------------------------
-// Pipeline.runWithContext
+// Conduit.runWithContext
 // ---------------------------------------------------------------------------
 
 [<Fact>]
-let ``Pipeline runWithContext returns correct RecordsRead when all pass`` () = task {
+let ``Conduit runWithContext returns correct RecordsRead when all pass`` () = task {
     let ctx    = ExecutionContext.``default`` ()
     let root : Root<int> = { Read = fun () -> taskSeq { yield 1; yield 2; yield 3 } }
     let vessel = Vessel.map id
     let leaf, _ = Helpers.collectSink<int>()
 
-    let! result = Pipeline.runWithContext ctx root vessel leaf
+    let! result = Conduit.runWithContext ctx root vessel leaf
 
     Assert.Equal(3L, result.RecordsRead)
     Assert.Equal(3L, result.RecordsAccepted)
@@ -53,13 +53,13 @@ let ``Pipeline runWithContext returns correct RecordsRead when all pass`` () = t
 }
 
 [<Fact>]
-let ``Pipeline runWithContext captures validation rejections in PipelineResult`` () = task {
+let ``Conduit runWithContext captures validation rejections in Harvest`` () = task {
     let ctx    = ExecutionContext.``default`` ()
     let root : Root<int> = { Read = fun () -> taskSeq { yield -1; yield 2; yield -3; yield 4 } }
     let vessel = Vessel.validate "stage" ctx Helpers.positiveValidator
     let leaf, read = Helpers.collectSink<int>()
 
-    let! result = Pipeline.runWithContext ctx root vessel leaf
+    let! result = Conduit.runWithContext ctx root vessel leaf
 
     Assert.Equal(4L, result.RecordsRead)
     Assert.Equal(2L, result.RecordsRejected)
@@ -69,25 +69,25 @@ let ``Pipeline runWithContext captures validation rejections in PipelineResult``
 }
 
 [<Fact>]
-let ``Pipeline runWithContext records a non-negative Duration`` () = task {
+let ``Conduit runWithContext records a non-negative Duration`` () = task {
     let ctx    = ExecutionContext.``default`` ()
     let root : Root<int> = { Read = fun () -> TaskSeq.empty }
     let vessel = Vessel.map id
     let leaf, _ = Helpers.collectSink<int>()
 
-    let! result = Pipeline.runWithContext ctx root vessel leaf
+    let! result = Conduit.runWithContext ctx root vessel leaf
 
     Assert.True(result.Duration >= TimeSpan.Zero)
 }
 
 [<Fact>]
-let ``Pipeline runWithContext with empty source returns zero counts`` () = task {
+let ``Conduit runWithContext with empty source returns zero counts`` () = task {
     let ctx    = ExecutionContext.``default`` ()
     let root : Root<int> = { Read = fun () -> TaskSeq.empty }
     let vessel = Vessel.map id
     let leaf, _ = Helpers.collectSink<int>()
 
-    let! result = Pipeline.runWithContext ctx root vessel leaf
+    let! result = Conduit.runWithContext ctx root vessel leaf
 
     Assert.Equal(0L, result.RecordsRead)
     Assert.Equal(0L, result.RecordsAccepted)
@@ -116,7 +116,7 @@ let ``Vessel validate throws OperationCanceledException for already-cancelled to
 }
 
 [<Fact>]
-let ``Pipeline runWithContext with FixedDelay(1) performs at most 2 total attempts`` () = task {
+let ``Conduit runWithContext with FixedDelay(1) performs at most 2 total attempts`` () = task {
     let ctx = ExecutionContext.create CancellationToken.None 1000
     let mutable totalAttempts = 0
     let root : Root<int> = {
@@ -131,14 +131,14 @@ let ``Pipeline runWithContext with FixedDelay(1) performs at most 2 total attemp
     
     // FixedDelay(1, ...) means initial attempt + 1 retry = 2 total
     let ctxWithRetry = { ctx with RetryPolicy = FixedDelay(1, TimeSpan.FromMilliseconds(10.0)) }
-    let! result = Pipeline.runWithContext ctxWithRetry root vessel leaf
+    let! result = Conduit.runWithContext ctxWithRetry root vessel leaf
     
     Assert.Equal(2, totalAttempts)
     Assert.Equal(1L, result.RecordsFailed)
 }
 
 [<Fact>]
-let ``Pipeline runWithContext successful retry does not include pulses from failed attempt`` () = task {
+let ``Conduit runWithContext successful retry does not include pulses from failed attempt`` () = task {
     let ctx = ExecutionContext.create CancellationToken.None 1000
     let mutable totalAttempts = 0
     let root : Root<int> = {
@@ -153,7 +153,7 @@ let ``Pipeline runWithContext successful retry does not include pulses from fail
     let leaf, _ = Helpers.collectSink<int>()
     
     let ctxWithRetry = { ctx with RetryPolicy = FixedDelay(1, TimeSpan.FromMilliseconds(10.0)) }
-    let! result = Pipeline.runWithContext ctxWithRetry root vessel leaf
+    let! result = Conduit.runWithContext ctxWithRetry root vessel leaf
     
     Assert.Equal(2, totalAttempts)
     Assert.Equal(1L, result.RecordsRead)

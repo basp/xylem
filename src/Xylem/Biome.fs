@@ -7,7 +7,7 @@ open System.Threading.Tasks
 module Biome =
 
     /// <summary>
-    /// The origin of a data pipeline — absorbs records from the ground up.
+    /// The origin of a data conduit — absorbs records from the ground up.
     /// </summary>
     /// <remarks>
     /// Calling <c>Read ()</c> starts a fresh, independent stream each time.
@@ -20,7 +20,7 @@ module Biome =
     }
 
     /// <summary>
-    /// The destination of a data pipeline — where records are delivered.
+    /// The destination of a data conduit — where records are delivered.
     /// </summary>
     /// <remarks>
     /// The leaf owns iteration, allowing bulk operations and internal buffering.
@@ -54,11 +54,11 @@ module Biome =
     /// </summary>
     type Severity =
         /// <summary>
-        /// Something noteworthy; the pipeline is healthy.
+        /// Something noteworthy; the conduit is healthy.
         /// </summary>
         | Info
         /// <summary>
-        /// Unexpected but recoverable; the pipeline continues.
+        /// Unexpected but recoverable; the conduit continues.
         /// </summary>
         | Warning
         /// <summary>
@@ -66,7 +66,7 @@ module Biome =
         /// </summary>
         | Error
         /// <summary>
-        /// Pipeline cannot continue; execution is aborted.
+        /// Conduit cannot continue; execution is aborted.
         /// </summary>
         | Fatal
 
@@ -98,9 +98,9 @@ module Biome =
         /// </summary>
         | BusinessRuleViolation of rule: string * reason: string
         /// <summary>
-        /// Pipeline error associated with a stage and exception.
+        /// A conduit error associated with a stage and exception.
         /// </summary>
-        | PipelineError         of stage: string * exn
+        | ConduitError         of stage: string * exn
         /// <summary>
         /// Custom error with tag and data payload.
         /// </summary>
@@ -111,7 +111,7 @@ module Biome =
         | RetryError            of attempt: int * exn
 
     /// <summary>
-    /// A single structured pulse emitted during a pipeline run.
+    /// A single structured pulse emitted during a conduit run.
     /// </summary>
     type Pulse = {
         /// <summary>
@@ -141,7 +141,7 @@ module Biome =
     }
 
     /// <summary>
-    /// Controls how the pipeline retries on failure.
+    /// Controls how the conduit retries on failure.
     /// <ul>
     /// <li><c>NoRetry</c> means failures are immediately final.</li>
     /// <li><c>FixedDelay</c> retries up to <c>maxAttempts</c> times with a constant delay between attempts.</li>
@@ -157,13 +157,13 @@ module Biome =
         | FixedDelay of maxAttempts: int * delay: TimeSpan
 
     /// <summary>
-    /// Coordinates a single pipeline run: configuration, cancellation, and diagnostic emission.
+    /// Coordinates a single conduit run: configuration, cancellation, and diagnostic emission.
     /// </summary>
     /// <remarks>
     /// Create via <c>ExecutionContext.create</c> or <c>ExecutionContext.default</c>.
     /// </remarks>
     type ExecutionContext = {
-        /// <summary>Signals cooperative cancellation to the pipeline.</summary>
+        /// <summary>Signals cooperative cancellation to the conduit.</summary>
         CancellationToken: System.Threading.CancellationToken
         /// <summary>Preferred number of records per batch for batch-aware sinks and flows.</summary>
         BatchSize:         int
@@ -176,16 +176,16 @@ module Biome =
         ReadEvents:        unit -> Pulse list
         /// <summary>Clears all pulses emitted so far.</summary>
         ClearEvents:       unit -> unit
-        /// <summary>Retry policy for the pipeline run. Defaults to <c>NoRetry</c>.</summary>
+        /// <summary>Retry policy for the conduit run. Defaults to <c>NoRetry</c>.</summary>
         RetryPolicy:       RetryPolicy
     }
 
     /// <summary>
-    /// A tree ring — aggregated diagnostic counts for a single pipeline stage.
+    /// A tree ring — aggregated diagnostic counts for a single conduit stage.
     /// Pulses with no <c>Stage</c> are grouped under <c>Stage = None</c>.
     /// </summary>
     type Ring = {
-        /// <summary>The stage name, or <c>None</c> for pipeline-level events.</summary>
+        /// <summary>The stage name, or <c>None</c> for conduit-level events.</summary>
         Stage:        string option
         /// <summary>Number of <c>Info</c>-level pulses in this stage.</summary>
         InfoCount:    int64
@@ -200,7 +200,7 @@ module Biome =
     }
 
     /// <summary>
-    /// The harvest — structured outcome of a completed pipeline run.
+    /// The harvest — structured outcome of a completed conduit run.
     /// </summary>
     type Harvest = {
         /// <summary>
@@ -208,11 +208,11 @@ module Biome =
         /// </summary>
         RecordsRead:     int64
         /// <summary>
-        /// Number of records accepted by the pipeline.
+        /// Number of records accepted by the conduit.
         /// </summary>
         RecordsAccepted: int64
         /// <summary>
-        /// Number of records rejected by the pipeline.
+        /// Number of records rejected by the conduit.
         /// </summary>
         RecordsRejected: int64
         /// <summary>
@@ -220,11 +220,11 @@ module Biome =
         /// </summary>
         RecordsFailed:   int64
         /// <summary>
-        /// Total duration of the pipeline run.
+        /// Total duration of the conduit run.
         /// </summary>
         Duration:        TimeSpan
         /// <summary>
-        /// Throughput of the pipeline run in records per second.
+        /// Throughput of the conduit run in records per second.
         /// </summary>
         Throughput:      float
         /// <summary>
@@ -242,7 +242,7 @@ module ExecutionContext =
     open Biome
 
     /// <summary>
-    /// Creates a new <c>ExecutionContext</c> for a single pipeline run.
+    /// Creates a new <c>ExecutionContext</c> for a single conduit run.
     /// </summary>
     /// <remarks>
     /// All pulses emitted via <c>Emit</c> are readable via <c>ReadEvents</c>.
@@ -313,7 +313,7 @@ module Harvest =
     /// </summary>
     /// <remarks>
     /// Pulses are grouped by <c>Stage</c> (with <c>None</c> as a valid group
-    /// for pipeline-level pulses). The order of rings follows the first
+    /// for conduit-level pulses). The order of rings follows the first
     /// occurrence of each stage in the pulse list.
     /// </remarks>
     let summarizeByStage (events: Pulse list) : Ring list =
@@ -457,7 +457,7 @@ module Vessel =
     /// </summary>
     /// <remarks>
     /// Throws <c>ArgumentException</c> if <c>batchSize</c> is less than 1.
-    /// To use the pipeline's configured batch size, pass <c>ctx.BatchSize</c>.
+    /// To use the conduit's configured batch size, pass <c>ctx.BatchSize</c>.
     /// </remarks>
     let batch (batchSize: int) : Vessel<'T, 'T[]> =
         if batchSize < 1 then
@@ -489,7 +489,7 @@ module Vessel =
     /// </summary>
     let transmute = map
 
-module Pipeline =
+module Conduit =
 
     open Biome
     open FSharp.Control
@@ -507,15 +507,15 @@ module Pipeline =
         leaf.Write(vessel.Transform(root.Read()))
 
     /// <summary>
-    /// Runs a pipeline under an <c>ExecutionContext</c> and returns a structured
+    /// Runs a conduit under an <c>ExecutionContext</c> and returns a structured
     /// <c>Harvest</c>. Counts every record emitted by the root, measures
     /// wall-clock duration, and collects all pulses from <c>ctx</c>.
     /// </summary>
     /// <remarks>
     /// Any unhandled exception (e.g., a connector I/O failure) is caught, emitted
     /// as a <c>Fatal</c> pulse, and the function returns a well-formed
-    /// <c>Harvest</c> reflecting the partial run rather than faulting the task.
-    /// When <c>ctx.RetryPolicy</c> is not <c>NoRetry</c>, the entire pipeline is
+    /// <c>Harvest</c>. Reflecting the partial run rather than faulting the task.
+    /// When <c>ctx.RetryPolicy</c> is not <c>NoRetry</c>, the entire conduit is
     /// re-executed from scratch on failure, up to the configured number of attempts.
     /// Each retry emits a <c>Warning</c>-level pulse. If all retries are
     /// exhausted, a <c>Fatal</c> pulse is emitted and the partial result is returned.
@@ -589,7 +589,7 @@ module Pipeline =
                             Stage       = None
                             RecordIndex = None
                             Timestamp   = DateTimeOffset.UtcNow
-                            Message     = $"Pipeline failed after {attempt + 1} attempt(s): {ex.Message}"
+                            Message     = $"Conduit failed after {attempt + 1} attempt(s): {ex.Message}"
                         }
 
                     attempt <- attempt + 1

@@ -20,7 +20,7 @@ let ``ErrorKind cases are all pattern-matchable`` () =
         IoError("/some/path", exn)
         ValidationError("Age", "must be >= 0")
         BusinessRuleViolation("MAX_ORDER_LINES", "exceeded limit of 100")
-        PipelineError("validate-stage", exn)
+        ConduitError("validate-stage", exn)
         Custom("my-biome-error", Map.ofList ["key", "value"])
         RetryError(1, exn)
     ]
@@ -31,11 +31,11 @@ let ``ErrorKind cases are all pattern-matchable`` () =
             | IoError _               -> "io"
             | ValidationError _       -> "validation"
             | BusinessRuleViolation _ -> "business"
-            | PipelineError _         -> "pipeline"
+            | ConduitError _         -> "conduit"
             | Custom _                -> "custom"
             | RetryError _            -> "retry")
     Assert.Equal<string list>(
-        ["system"; "io"; "validation"; "business"; "pipeline"; "custom"; "retry"],
+        ["system"; "io"; "validation"; "business"; "conduit"; "custom"; "retry"],
         labels)
 
 [<Fact>]

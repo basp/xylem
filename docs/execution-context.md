@@ -1,12 +1,12 @@
 # 🌤️ Execution Context
 
-The runtime coordinator for a pipeline run — carrying cancellation, batch size, diagnostic emission, and retry policy.
+The runtime coordinator for a Conduit run — carrying cancellation, batch size, diagnostic emission, and retry policy.
 
 ---
 
 ## `ExecutionContext`
 
-An `ExecutionContext` coordinates a single pipeline run. It carries
+An `ExecutionContext` coordinates a single Conduit run. It carries
 everything a vessel or combinator needs at runtime — without baking
 run-specific concerns into the `Vessel` type itself.
 
@@ -28,7 +28,7 @@ type ExecutionContext = {
 | `BatchSize` | Preferred number of records per batch for batch-aware sinks and vessels |
 | `Emit` | Records a `Pulse` for the current run (thread-safe) |
 | `ReadEvents` | Returns all events emitted so far, in emission order |
-| `RetryPolicy` | Controls retry behaviour on pipeline failure (default: `NoRetry`) |
+| `RetryPolicy` | Controls retry behaviour on Conduit failure (default: `NoRetry`) |
 
 ### Creating a context
 
@@ -137,7 +137,7 @@ dropped because the final group is smaller than `batchSize`.
 #### Using `ctx.BatchSize`
 
 `BatchSize` is a first-class field on `ExecutionContext` for exactly
-this purpose. Pass it directly to respect the pipeline's configured
+this purpose. Pass it directly to respect the Conduit's configured
 batch size:
 
 ```fsharp
@@ -163,7 +163,7 @@ for callers that need to hand the batch to a .NET API expecting an array.
 #### Composing `batch` with other vessels
 
 Because the output type changes from `'T` to `'T[]`, `batch` is
-typically the **last** vessel in a composed pipeline:
+typically the **last** vessel in a composed Conduit:
 
 ```fsharp
 // validate, then enrich, then group into batches for bulk insert

@@ -6,7 +6,7 @@ How to write custom connectors for Xylem — sources, sinks, and the patterns th
 
 ## What is a connector?
 
-A connector is a pair of functions that bridge Xylem's pipeline model
+A connector is a pair of functions that bridge Xylem's Conduit model
 and an external system — a file, a database, an HTTP API, a message
 queue, or anything else. Connectors come in two flavours:
 
@@ -274,7 +274,7 @@ let ``Factory throwing surfaces as Fatal`` () = task {
     let vessel = Vessel.map id
     let leaf, _ = InMemory.sink<string> ()
 
-    let! result = Pipeline.runWithContext ctx root vessel leaf
+    let! result = Conduit.runWithContext ctx root vessel leaf
 
     Assert.Equal(1L, result.RecordsFailed)
     Assert.Equal(Fatal, result.Events[0].Severity)
@@ -285,11 +285,11 @@ let ``Factory throwing surfaces as Fatal`` () = task {
 
 ## Error handling
 
-Connectors do **not** emit diagnostics directly. The pipeline engine
+Connectors do **not** emit diagnostics directly. The Conduit engine
 handles that:
 
 - **Infrastructure failures** (e.g. file not found, connection refused)
-  — let the exception propagate. `Pipeline.runWithContext` catches it
+  — let the exception propagate. `Conduit.runWithContext` catches it
   and records a `Fatal` pulse in the `Harvest`.
 - **Per-record failures** (e.g. a malformed row) — handle these in a
   `Vessel` using `Vessel.validate` or `Vessel.enrich`, not in the
@@ -300,7 +300,7 @@ handles that:
 If your source encounters a recoverable error mid-stream (e.g. a
 transient network hiccup), you have two options:
 
-1. **Let it throw** — the pipeline's `RetryPolicy` will re-execute from
+1. **Let it throw** — the Conduit's `RetryPolicy` will re-execute from
    the beginning if configured.
 2. **Retry internally** — if the source can resume from where it left
    off (e.g. an offset-based API), implement retry logic inside the
@@ -370,7 +370,7 @@ exception is thrown.
 ## Cancellation
 
 Sources do not need to check a `CancellationToken` explicitly. The
-pipeline consumer calls `GetAsyncEnumerator(ct)`, and `taskSeq` respects
+Conduit consumer calls `GetAsyncEnumerator(ct)`, and `taskSeq` respects
 the token automatically — a cancelled token interrupts `MoveNextAsync`
 and triggers disposal.
 
@@ -411,7 +411,7 @@ let batchSink (batchSize: int) (conn: DbConnection) : Leaf<MyRecord[]> = {
 
 // Usage:
 let vessel = Vessel.map transform >>> Vessel.batch 500
-do! Pipeline.runWith source vessel (batchSink 500 conn)
+do! Conduit.runWith source vessel (batchSink 500 conn)
 ```
 
 The connector receives `MyRecord[]` chunks and can issue a single INSERT

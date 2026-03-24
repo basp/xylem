@@ -1,12 +1,12 @@
 # 🧬 Core Types
 
-The three building blocks of every Xylem pipeline: `Root`, `Vessel`, and `Leaf`.
+The three building blocks of every Xylem Conduit: `Root`, `Vessel`, and `Leaf`.
 
 ---
 
 ## `Root<'T>`
 
-A `Root<'T>` is the **entry point** of any Xylem pipeline. It produces a
+A `Root<'T>` is the **entry point** of any Xylem Conduit. It produces a
 stream of records of type `'T` as an `IAsyncEnumerable<'T>`.
 
 ### Type definition
@@ -70,7 +70,7 @@ let! items = numbersRoot.Read() |> TaskSeq.toListAsync
 
 ## `Leaf<'T>`
 
-A `Leaf<'T>` is the **exit point** of a pipeline. It consumes an
+A `Leaf<'T>` is the **exit point** of a Conduit. It consumes an
 `IAsyncEnumerable<'T>` stream and returns `Task<unit>` once all records
 have been processed.
 
@@ -93,7 +93,7 @@ own iteration strategy:
   stream rather than per-item.
 
 An item-by-item `Write: 'T -> Task<unit>` interface would force the
-pipeline engine to drive iteration, removing that flexibility.
+Conduit engine to drive iteration, removing that flexibility.
 
 ### Creating a leaf
 
@@ -115,13 +115,13 @@ let collectSink () =
 
 ### Connecting a root to a leaf
 
-Use `Pipeline.run` to wire a `Root` to a `Leaf`:
+Use `Conduit.run` to wire a `Root` to a `Leaf`:
 
 ```fsharp
-do! Pipeline.run root leaf
+do! Conduit.run root leaf
 ```
 
-`Pipeline.run` simply passes the root stream to the leaf's `Write`
+`Conduit.run` simply passes the root stream to the leaf's `Write`
 function:
 
 ```fsharp
@@ -145,10 +145,10 @@ type Vessel<'TIn, 'TOut> = {
 }
 ```
 
-> **Vessel vs Pipeline:** A `Vessel` defines *what* transformation to apply
-> — it is a reusable, composable value. The `Pipeline` module defines
+> **Vessel vs Conduit:** A `Vessel` defines *what* transformation to apply
+> — it is a reusable, composable value. The `Conduit` module defines
 > *how* to execute a complete `Root` → `Vessel` → `Leaf` chain. Think of a
-> `Vessel` as a recipe and `Pipeline.runWithContext` as the kitchen that
+> `Vessel` as a recipe and `Conduit.runWithContext` as the kitchen that
 > runs it.
 
 ### Why a stream-to-stream function?
@@ -198,13 +198,13 @@ Composition is lazy — no work happens until the stream is consumed.
 
 ### Connecting root, vessel, and leaf
 
-Use `Pipeline.runWith` to wire all three together:
+Use `Conduit.runWith` to wire all three together:
 
 ```fsharp
-do! Pipeline.runWith root vessel leaf
+do! Conduit.runWith root vessel leaf
 ```
 
-`Pipeline.runWith` threads the stream through the vessel before handing
+`Conduit.runWith` threads the stream through the vessel before handing
 it to the leaf:
 
 ```fsharp

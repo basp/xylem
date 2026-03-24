@@ -4,7 +4,7 @@ open FSharp.Control
 open Xylem.Biome
 
 /// <summary>
-/// In-memory connectors for tests, examples, and simple one-off pipelines.
+/// In-memory connectors for tests, examples, and simple one-off conduits.
 /// No I/O, no external dependencies.
 /// </summary>
 module InMemory =

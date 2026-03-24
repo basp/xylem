@@ -1,6 +1,6 @@
 # 🔄 Retry Policy
 
-How Xylem retries failed pipelines — configuration, behaviour, and diagnostic events.
+How Xylem retries failed Conduits — configuration, behaviour, and diagnostic events.
 
 ---
 
@@ -15,7 +15,7 @@ type RetryPolicy =
 | Case | Behaviour |
 |---|---|
 | `NoRetry` | Failure is immediately final. This is the default. |
-| `FixedDelay(n, d)` | On failure, wait `d`, then re-run the pipeline from scratch. Repeat up to `n` times. Total executions = `n + 1` (initial + retries). |
+| `FixedDelay(n, d)` | On failure, wait `d`, then re-run the Conduit from scratch. Repeat up to `n` times. Total executions = `n + 1` (initial + retries). |
 
 ---
 
@@ -39,7 +39,7 @@ let ctx =
 
 ## What gets retried
 
-The retry loop wraps the **entire pipeline**: root → vessel → leaf.
+The retry loop wraps the **entire Conduit**: root → vessel → leaf.
 On each retry, `root.Read()` is called again, the vessel processes from
 the beginning, and the sink receives a fresh stream. Both the record
 count and diagnostic pulses are reset per attempt — `Harvest` reflects
@@ -69,19 +69,19 @@ If all retries are exhausted, a `Fatal`-level `RetryError` is emitted:
 { Severity = Fatal
   Kind     = RetryError(4, ex)   // final attempt (initial + 3 retries)
   ...
-  Message  = "Pipeline failed after 4 attempt(s): <message>" }
+  Message  = "Conduit failed after 4 attempt(s): <message>" }
 ```
 
 ---
 
 ## Example: retry with inspection
 
-This example configures a pipeline that retries up to twice on failure,
+This example configures a Conduit that retries up to twice on failure,
 waiting 200ms between attempts. After the run, it prints the overall
 counts and then extracts the retry-specific events from the result.
 Because diagnostic events accumulate across all attempts, you get a
 full history: a `Warning` for each failed-but-retried attempt, and — if
-the pipeline never recovered — a final `Fatal` indicating exhaustion.
+the Conduit never recovered — a final `Fatal` indicating exhaustion.
 
 ```fsharp
 open System
@@ -90,7 +90,7 @@ let ctx =
     { ExecutionContext.``default`` () with
         RetryPolicy = FixedDelay(2, TimeSpan.FromMilliseconds 200.0) }
 
-let! result = Pipeline.runWithContext ctx root vessel leaf
+let! result = Conduit.runWithContext ctx root vessel leaf
 
 printfn $"Read: %d{result.RecordsRead}  Failed: %d{result.RecordsFailed}"
 
@@ -113,6 +113,6 @@ If the `CancellationToken` is triggered during the delay between retries,
 `OperationCanceledException` propagates immediately — the retry loop
 does not swallow cancellation.
 
-For the full design rationale (why whole-pipeline retry, why not
+For the full design rationale (why whole-Conduit retry, why not
 per-record, why `FixedDelay` only), see
 [design decisions — retry policy](design-decisions.md#retry-policy).

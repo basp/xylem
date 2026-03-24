@@ -75,7 +75,7 @@ let ``Json sink supports WriteIndented option`` () = task {
 }
 
 [<Fact>]
-let ``Full pipeline with Json source and sink`` () = task {
+let ``Full conduit with Json source and sink`` () = task {
     let sourcePath = Path.GetTempFileName()
     let sinkPath = Path.GetTempFileName()
     let data = [ { Id = 1; Name = "Alice" }; { Id = 2; Name = "Bob" } ]
@@ -86,7 +86,7 @@ let ``Full pipeline with Json source and sink`` () = task {
         let vessel = Vessel.map (fun p -> { p with Name = p.Name.ToUpper() })
         let leaf = Json.sinkDefault<Person> sinkPath
 
-        do! Pipeline.runWith root vessel leaf
+        do! Conduit.runWith root vessel leaf
 
         let resultJson = File.ReadAllText(sinkPath)
         let result = JsonSerializer.Deserialize<Person list>(resultJson)

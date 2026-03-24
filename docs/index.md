@@ -2,9 +2,9 @@
 
 > A composable, diagnostic-first ETL library written in idiomatic F#.
 
-Xylem models data pipelines as three composable pieces: a **Root**
+Xylem models data Conduits as three composable pieces: a **Root**
 (source), a **Vessel** (transform), and a **Leaf** (sink). Every
-pipeline run produces a structured **Harvest** with counts, timing, and
+Conduit run produces a structured **Harvest** with counts, timing, and
 a full diagnostic event stream — even when things go wrong.
 
 ---
@@ -12,7 +12,7 @@ a full diagnostic event stream — even when things go wrong.
 ## 🧭 Getting Started
 
 Start with **Core Types** to understand the three building blocks, then
-read **Pipelines** to see how they fit together. The remaining
+read **Conduits** to see how they fit together. The remaining
 guides cover specific topics as you need them.
 
 ---
@@ -21,15 +21,15 @@ guides cover specific topics as you need them.
 
 ### [Core Types](core-types.md)
 
-The three building blocks of every pipeline: `Root<'T>` (async source
+The three building blocks of every Conduit: `Root<'T>` (async source
 stream), `Vessel<'TIn,'TOut>` (lazy stream transform), and `Leaf<'T>`
 (async sink). Covers type definitions, creation patterns, composition
-with `>>>`, and how `Pipeline.run` / `Pipeline.runWith` wire them
+with `>>>`, and how `Conduit.run` / `Conduit.runWith` wire them
 together.
 
-### [Pipelines](pipelines.md)
+### [Conduits](Conduits.md)
 
-How `Pipeline.runWithContext` executes a full Root → Vessel → Leaf
+How `Conduit.runWithContext` executes a full Root → Vessel → Leaf
 chain. Covers record counting, wall-clock timing, the guaranteed
 `Harvest` on failure, and how unhandled exceptions are captured as
 `Fatal` diagnostics rather than faulting the task.
@@ -40,13 +40,13 @@ chain. Covers record counting, wall-clock timing, the guaranteed
 
 Xylem's structured diagnostic model. Defines `Severity` (Info through
 Fatal), `ErrorKind` (a pattern-matchable discriminated union),
-`Pulse` (a single timestamped event), `Harvest` (the complete pipeline
+`Pulse` (a single timestamped event), `Harvest` (the complete Conduit
 outcome), and `Ring` (per-stage aggregation). Every failure is data,
 not an exception.
 
 ### [Execution Context](execution-context.md)
 
-The `ExecutionContext` record that coordinates a pipeline run —
+The `ExecutionContext` record that coordinates a Conduit run —
 carrying cancellation tokens, batch size, diagnostic emission, and
 retry policy. Also covers context-aware vessel combinators:
 `Vessel.validate` (check records), `Vessel.enrich` (transform with
@@ -55,16 +55,16 @@ possible rejection), and `Vessel.batch` (group into fixed-size arrays).
 ### [Error Handling](error-handling.md)
 
 The complete error handling story — from per-record rejections
-(validation and enrichment) to pipeline-level crashes. Covers severity
+(validation and enrichment) to Conduit-level crashes. Covers severity
 levels, choosing the right `ErrorKind`, inspecting `Harvest` counts
 and `Pulse` lists, per-stage summaries via `Ring`, and common patterns
-like validate-then-enrich pipelines.
+like validate-then-enrich Conduits.
 
 ### [Retry Policy](retry-policy.md)
 
-How `RetryPolicy` controls automatic retry on pipeline failure.
+How `RetryPolicy` controls automatic retry on Conduit failure.
 Covers `NoRetry` (default) and `FixedDelay` configuration, what gets
-retried (the entire pipeline from scratch), diagnostic events emitted
+retried (the entire Conduit from scratch), diagnostic events emitted
 during retries, and cancellation behaviour between attempts.
 
 ### [Connectors](connectors.md)
@@ -73,7 +73,7 @@ The three built-in connectors: `InMemory` (lists and arrays — ideal for
 tests), `File` (line-oriented local file I/O), and `Json` (structured
 JSON array files). Covers factory constructors for testability,
 `FileLeafOptions`, `JsonLeafOptions`, resource lifetime, testing without
-I/O, and full pipeline examples.
+I/O, and full Conduit examples.
 
 ### [Connector Authoring](connector-authoring.md)
 
@@ -87,6 +87,6 @@ management, cancellation, and batching.
 
 Architectural rationale behind key choices: how vessels emit
 diagnostics (side-channel vs in-stream `Result`), exception handling
-in `runWithContext`, whole-pipeline retry vs per-record retry, `Ring`
+in `runWithContext`, whole-Conduit retry vs per-record retry, `Ring`
 as a standalone function vs a `Harvest` field, and why `Emit` is
 synchronous.

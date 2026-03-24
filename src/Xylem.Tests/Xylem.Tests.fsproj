@@ -12,7 +12,7 @@
     <Compile Include="LeafTests.fs" />
     <Compile Include="ExecutionContextTests.fs" />
     <Compile Include="VesselTests.fs" />
-    <Compile Include="PipelineTests.fs" />
+    <Compile Include="ConduitTests.fs" />
     <Compile Include="InMemoryTests.fs" />
     <Compile Include="FileConnectorTests.fs" />
     <Compile Include="JsonConnectorTests.fs" />

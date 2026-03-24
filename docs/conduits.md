@@ -1,19 +1,19 @@
-# 🎍 Pipelines
+# 🎍 Conduits
 
-How to execute a complete Root → Vessel → Leaf pipeline and interpret the results.
+How to execute a complete Root → Vessel → Leaf Conduit and interpret the results.
 
 ---
 
-## `Pipeline.runWithContext`
+## `Conduit.runWithContext`
 
-`Pipeline.runWithContext` is the full-featured runner. It wraps
+`Conduit.runWithContext` is the full-featured runner. It wraps
 `runWith`, counts every record emitted by the root, measures
 wall-clock duration, and collects all diagnostic events from `ctx`:
 
 ```fsharp
 let ctx = ExecutionContext.``default`` ()
 
-let! result : Harvest = Pipeline.runWithContext ctx root vessel leaf
+let! result : Harvest = Conduit.runWithContext ctx root vessel leaf
 ```
 
 `result.RecordsRead` is the direct count of records emitted by the root.
@@ -33,10 +33,10 @@ already-cancelled token throws immediately without touching the root.
 
 ### Re-execution and Event Preservation
 
-When a retry occurs, the pipeline follows these key behaviors:
+When a retry occurs, the Conduit follows these key behaviors:
 
-*   **Full Re-execution:** The pipeline re-starts **from scratch**. This means the `Read` function of the root is invoked again on each retry, initiating a fresh, independent stream.
-*   **State Reset:** On each retry, the pipeline resets internal counters (like `RecordsRead`). The final `Harvest` reflects the counts from the **last attempted run** (whether it succeeded or reached the final failure).
+*   **Full Re-execution:** The Conduit re-starts **from scratch**. This means the `Read` function of the root is invoked again on each retry, initiating a fresh, independent stream.
+*   **State Reset:** On each retry, the Conduit resets internal counters (like `RecordsRead`). The final `Harvest` reflects the counts from the **last attempted run** (whether it succeeded or reached the final failure).
 *   **Event Preservation:** Although the run counters reset, the `ExecutionContext` ensures that `RetryError` pulses from previous failed attempts are preserved. These are included in the final `Harvest.Events` list, allowing you to trace the history of the run.
 
 ---
@@ -49,7 +49,7 @@ emitted as one `Fatal`-severity `Pulse`, and a well-formed
 `Harvest` is returned reflecting the partial run.
 
 When a `FixedDelay` retry policy is configured, the engine re-executes
-the **entire pipeline** from scratch on each retry. Each failed attempt
+the **entire Conduit** from scratch on each retry. Each failed attempt
 emits a `Warning`-level `RetryError` event. If all retries are
 exhausted, a `Fatal`-level `RetryError` event is emitted and the partial
 result is returned:
@@ -58,7 +58,7 @@ result is returned:
 // Retry up to 3 times with 500ms between attempts
 let ctx = { ExecutionContext.``default`` () with RetryPolicy = FixedDelay(3, TimeSpan.FromMilliseconds 500.0) }
 
-let! result = Pipeline.runWithContext ctx root vessel leaf
+let! result = Conduit.runWithContext ctx root vessel leaf
 
 // Inspect retry diagnostics
 for e in result.Events do
@@ -81,7 +81,7 @@ behaviour details.
 | Events emitted before crash | Included in `result.Events` |
 
 > **Note:** `OperationCanceledException` (from `CancellationToken`) is
-> intentionally **not** caught. A cancelled pipeline is not a pipeline
+> intentionally **not** caught. A cancelled Conduit is not a Conduit
 > failure — it is a deliberate stop signal, and the exception should
 > propagate normally so callers can distinguish cancellation from error.
 

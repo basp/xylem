@@ -64,7 +64,7 @@ module ResilienceTests =
         let leaf, _ = InMemory.sink<Person> ()
         let ctx = ExecutionContext.``default`` ()
         
-        let! harvest = Pipeline.runWithContext ctx root (Vessel.transmute id) leaf
+        let! harvest = Conduit.runWithContext ctx root (Vessel.transmute id) leaf
         
         Assert.Equal(int64 count, harvest.RecordsRead)
         Assert.True(harvest.Throughput > 0.0, $"Throughput was {harvest.Throughput}")
@@ -73,7 +73,7 @@ module ResilienceTests =
     }
 
     [<Fact>]
-    let ``Pipeline retry policy works and emits pulses`` () = task {
+    let ``Conduit retry policy works and emits pulses`` () = task {
         let mutable calls = 0
         let failingRoot : Root<int> = {
             Read = fun () -> taskSeq {
@@ -94,7 +94,7 @@ module ResilienceTests =
             ExecutionContext.``default`` ()
             |> ExecutionContext.withRetryPolicy policy
         
-        let! harvest = Pipeline.runWithContext ctx failingRoot (Vessel.transmute id) leaf
+        let! harvest = Conduit.runWithContext ctx failingRoot (Vessel.transmute id) leaf
         
         Assert.Equal(3, calls)
         Assert.Equal(5L, harvest.RecordsRead)

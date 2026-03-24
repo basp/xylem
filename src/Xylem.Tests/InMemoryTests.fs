@@ -82,12 +82,12 @@ let ``InMemory sink read returns a fresh snapshot each call`` () = task {
 }
 
 [<Fact>]
-let ``InMemory source and sink round-trip a full pipeline`` () = task {
+let ``InMemory source and sink round-trip a full conduit`` () = task {
     let source     = InMemory.source [1; 2; 3; 4; 5]
     let vessel     = Vessel.filter (fun x -> x % 2 = 0)
     let sink, read = InMemory.sink ()
 
-    do! Pipeline.runWith source vessel sink
+    do! Conduit.runWith source vessel sink
 
     Assert.Equal<int list>([2; 4], read ())
 }

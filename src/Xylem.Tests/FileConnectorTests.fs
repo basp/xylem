@@ -67,13 +67,13 @@ let ``File sourceFrom Read called twice calls factory twice`` () = task {
 }
 
 [<Fact>]
-let ``File sourceFrom factory throwing surfaces as Fatal in PipelineResult`` () = task {
+let ``File sourceFrom factory throwing surfaces as Fatal in Harvest`` () = task {
     let ctx    = ExecutionContext.``default`` ()
     let root : Root<string> = File.sourceFrom (fun () -> failwith "cannot open file")
     let vessel = Vessel.map id
     let leaf, _ = Helpers.collectSink<string>()
 
-    let! result = Pipeline.runWithContext ctx root vessel leaf
+    let! result = Conduit.runWithContext ctx root vessel leaf
 
     Assert.Equal(1L, result.RecordsFailed)
     Assert.Equal(Fatal, result.Events[0].Severity)
@@ -134,7 +134,7 @@ let ``File sourceFrom and sinkFrom round-trip through a vessel`` () = task {
                 | _       -> Result.Error (ValidationError("line", $"'{line}' is not an integer"))))
             (Vessel.map string)
 
-    let! result = Pipeline.runWithContext ctx source vessel sink
+    let! result = Conduit.runWithContext ctx source vessel sink
 
     Assert.Equal(4L, result.RecordsRead)
     Assert.Equal(3L, result.RecordsAccepted)

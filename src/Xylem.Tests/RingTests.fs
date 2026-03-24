@@ -44,12 +44,12 @@ let ``summarizeByStage includes stageless events under None`` () =
     let summaries = Harvest.summarizeByStage events
     Assert.Equal(2, summaries.Length)
 
-    let pipeline = summaries |> List.find (fun s -> s.Stage = None)
-    Assert.Equal(0L, pipeline.InfoCount)
-    Assert.Equal(1L, pipeline.WarningCount)
-    Assert.Equal(0L, pipeline.ErrorCount)
-    Assert.Equal(1L, pipeline.FatalCount)
-    Assert.Equal(2L, pipeline.TotalCount)
+    let conduit = summaries |> List.find (fun s -> s.Stage = None)
+    Assert.Equal(0L, conduit.InfoCount)
+    Assert.Equal(1L, conduit.WarningCount)
+    Assert.Equal(0L, conduit.ErrorCount)
+    Assert.Equal(1L, conduit.FatalCount)
+    Assert.Equal(2L, conduit.TotalCount)
 
 [<Fact>]
 let ``summarizeByStage counts all severity levels`` () =

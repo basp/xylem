@@ -42,14 +42,14 @@ let ``Vessel map on empty stream yields empty stream`` () = task {
 }
 
 [<Fact>]
-let ``Pipeline runWith threads root through vessel into leaf`` () = task {
+let ``Conduit runWith threads root through vessel into leaf`` () = task {
     let root : Root<int> = {
         Read = fun () -> taskSeq { yield 1; yield 2; yield 3; yield 4; yield 5 }
     }
     let vessel     = filter (fun x -> x % 2 <> 0)
     let leaf, read = Helpers.collectSink<int>()
 
-    do! Pipeline.runWith root vessel leaf
+    do! Conduit.runWith root vessel leaf
 
     Assert.Equal<int list>([1; 3; 5], read ())
 }

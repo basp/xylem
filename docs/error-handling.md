@@ -1,6 +1,6 @@
 # 🍂 Error Handling Guide
 
-How Xylem handles failures — from per-record rejections to pipeline-level crashes — and how to work with the results.
+How Xylem handles failures — from per-record rejections to Conduit-level crashes — and how to work with the results.
 
 ---
 
@@ -8,7 +8,7 @@ How Xylem handles failures — from per-record rejections to pipeline-level cras
 
 Xylem treats errors as **data, not exceptions**. Every failure is captured
 as a structured `Pulse` with a severity, an `ErrorKind`, a stage name, and
-a record index. The pipeline (`flow`) keeps running past recoverable errors so you
+a record index. The Conduit (`flow`) keeps running past recoverable errors so you
 always get a complete picture of what went wrong — not just the first failure.
 
 Three principles guide the design:
@@ -17,7 +17,7 @@ Three principles guide the design:
    error produces a `Pulse` that ends up in the `Harvest`.
 2. **Structured, not stringly-typed.** `ErrorKind` is a discriminated union
    you can pattern-match — no parsing error messages.
-3. **The pipeline always returns a result.** Even a crashing pipeline
+3. **The Conduit always returns a result.** Even a crashing Conduit
    returns a well-formed `Harvest` with partial counts, timing, and the
    events emitted before the crash.
 
@@ -27,12 +27,12 @@ Three principles guide the design:
 
 Every `Pulse` carries a `Severity` that tells you how bad it is:
 
-| Severity | Meaning | Pipeline continues? |
+| Severity | Meaning | Conduit continues? |
 |----------|---------|---------------------|
-| `Info` | Something noteworthy; pipeline is healthy | Yes |
+| `Info` | Something noteworthy; Conduit is healthy | Yes |
 | `Warning` | Unexpected but recoverable (e.g. a retry attempt) | Yes |
 | `Error` | A record was rejected — it is dropped from the stream | Yes |
-| `Fatal` | The pipeline cannot continue — execution is aborted | No |
+| `Fatal` | The Conduit cannot continue — execution is aborted | No |
 
 The `Harvest` counts are derived directly from these:
 
@@ -95,7 +95,7 @@ Pick the `ErrorKind` case that best describes what went wrong:
 | `BusinessRuleViolation (rule, reason)` | A biome rule was violated |
 | `IoError (path, exn)` | An I/O operation failed |
 | `SystemError exn` | An unexpected system-level error |
-| `PipelineError (stage, exn)` | A stage-level infrastructure error |
+| `ConduitError (stage, exn)` | A stage-level infrastructure error |
 | `Custom (tag, data)` | Biome-specific errors that don't fit the above |
 
 For the full type definitions, see [diagnostics](diagnostics.md).
@@ -109,15 +109,15 @@ Error (Custom("rate-limit", Map.ofList [("endpoint", url); ("retryAfter", "30")]
 
 ---
 
-## Pipeline-level errors
+## Conduit-level errors
 
 Not all failures are per-record. A connector might fail to open a file,
 a vessel might throw an unhandled exception, or a sink might crash
-mid-write. These are **pipeline-level** errors.
+mid-write. These are **Conduit-level** errors.
 
 ### Guaranteed Harvest
 
-`Pipeline.runWithContext` (or `flow`) catches any unhandled exception (except
+`Conduit.runWithContext` (or `flow`) catches any unhandled exception (except
 `OperationCanceledException`), emits a `Fatal` pulse, and returns a
 well-formed `Harvest`:
 
@@ -127,7 +127,7 @@ let root = File.source "missing-file.txt"
 let vessel = Vessel.map id
 let leaf, _ = InMemory.sink ()
 
-let! result = Pipeline.runWithContext ctx root vessel leaf
+let! result = Conduit.runWithContext ctx root vessel leaf
 
 // result.RecordsFailed = 1
 // result.Events contains one Fatal pulse
@@ -159,14 +159,14 @@ let ctx = ExecutionContext.create cts.Token 1000
 cts.Cancel()
 
 // This throws OperationCanceledException — not a Harvest with Fatal
-let! result = Pipeline.runWithContext ctx root vessel leaf
+let! result = Conduit.runWithContext ctx root vessel leaf
 ```
 
 ---
 
 ## Retry policy
 
-When a pipeline fails, the retry policy controls what happens next.
+When a Conduit fails, the retry policy controls what happens next.
 
 ### NoRetry (default)
 
@@ -189,7 +189,7 @@ let ctx =
 ```
 
 On each retry:
-- The **entire pipeline** is re-executed from scratch (root, vessel, leaf)
+- The **entire Conduit** is re-executed from scratch (root, vessel, leaf)
 - A `Warning`-level `RetryError` pulse is emitted with the attempt number
 - Record counts and diagnostic events are reset — only the final attempt's counts and pulses are reported
 
@@ -200,7 +200,7 @@ If all retries are exhausted:
 ### Inspecting retry events
 
 ```fsharp
-let! result = Pipeline.runWithContext ctx root vessel leaf
+let! result = Conduit.runWithContext ctx root vessel leaf
 
 for e in result.Events do
     match e.Severity, e.Kind with
@@ -223,10 +223,10 @@ does not swallow cancellation.
 
 ### Harvest counts
 
-After a pipeline run, the `Harvest` gives you the summary:
+After a Conduit run, the `Harvest` gives you the summary:
 
 ```fsharp
-let! result = Pipeline.runWithContext ctx root vessel leaf
+let! result = Conduit.runWithContext ctx root vessel leaf
 
 printfn $"Read:     {result.RecordsRead}"
 printfn $"Accepted: {result.RecordsAccepted}"
@@ -259,7 +259,7 @@ Use `Harvest.summarizeByStage` to aggregate pulse counts by stage:
 let summaries = Harvest.summarizeByStage result.Events
 
 for s in summaries do
-    let stage = s.Stage |> Option.defaultValue "(pipeline)"
+    let stage = s.Stage |> Option.defaultValue "(Conduit)"
     printfn $"{stage}: {s.ErrorCount} errors, {s.WarningCount} warnings"
 ```
 
@@ -271,7 +271,7 @@ entry.
 
 ## Patterns and recipes
 
-### Validate-then-enrich pipeline
+### Validate-then-enrich Conduit
 
 A common pattern: validate inputs, then enrich the valid ones. Rejections
 from either stage are tracked independently:
@@ -287,7 +287,7 @@ let vessel =
         if x < 100 then Ok $"item-{x}"
         else Error (BusinessRuleViolation("add-label", "value too large")))
 
-let! result = Pipeline.runWithContext ctx root vessel leaf
+let! result = Conduit.runWithContext ctx root vessel leaf
 
 // Per-stage breakdown
 let summaries = Harvest.summarizeByStage result.Events
@@ -321,7 +321,7 @@ let enricher (order: Order) =
 Check `RecordsFailed` to decide whether the run was catastrophic:
 
 ```fsharp
-let! result = Pipeline.runWithContext ctx root vessel leaf
+let! result = Conduit.runWithContext ctx root vessel leaf
 
 if result.RecordsFailed > 0 then
     let fatal = result.Events |> List.filter (fun e -> e.Severity = Fatal)
@@ -334,15 +334,15 @@ else
 
 ### Error Handling Checklist
 
-Before finalizing your pipeline's error handling strategy, verify:
+Before finalizing your Conduit's error handling strategy, verify:
 
-- [ ] **Distinguish record vs. pipeline errors**: Use `Vessel.validate` or `Vessel.enrich` for individual record rejections, and let infrastructure exceptions propagate to be caught as `Fatal` pulses.
+- [ ] **Distinguish record vs. Conduit errors**: Use `Vessel.validate` or `Vessel.enrich` for individual record rejections, and let infrastructure exceptions propagate to be caught as `Fatal` pulses.
 - [ ] **Choose the right `ErrorKind`**: Use specific cases like `ValidationError` or `BusinessRuleViolation` instead of generic strings to allow for easier pattern-matching.
 - [ ] **Leverage `Custom` errors**: For biome-specific failures that don't fit the standard categories, use `Custom(tag, data)` to carry structured diagnostic information.
-- [ ] **Configure Retry Policies**: Ensure `RetryPolicy` is explicitly set in the `ExecutionContext` if the pipeline needs to recover from transient failures.
+- [ ] **Configure Retry Policies**: Ensure `RetryPolicy` is explicitly set in the `ExecutionContext` if the Conduit needs to recover from transient failures.
 - [ ] **Handle the `Harvest`**: Check `result.RecordsFailed` and `result.RecordsRejected` after execution to decide if the run was successful or requires manual intervention.
 - [ ] **Inspect the `Pulse` stream**: Use `Harvest.summarizeByStage` or filter `result.Events` to identify which stages are producing the most errors.
-- [ ] **Respect Cancellation**: Ensure custom vessels or connectors call `ThrowIfCancellationRequested()` during long-running loops to support clean pipeline shutdowns.
+- [ ] **Respect Cancellation**: Ensure custom vessels or connectors call `ThrowIfCancellationRequested()` during long-running loops to support clean Conduit shutdowns.
 
 ---
 
@@ -350,10 +350,10 @@ Before finalizing your pipeline's error handling strategy, verify:
 
 | Concept | Mechanism |
 |---------|-----------|
-| Record rejected by validation | `Error`-severity `Pulse`, record dropped, pipeline continues |
+| Record rejected by validation | `Error`-severity `Pulse`, record dropped, Conduit continues |
 | Record rejected by enrichment | Same as validation |
-| Unhandled exception in pipeline | Caught, `Fatal` pulse emitted, `Harvest` returned |
+| Unhandled exception in Conduit | Caught, `Fatal` pulse emitted, `Harvest` returned |
 | Cancellation | `OperationCanceledException` propagates — not a `Harvest` |
-| Retry on failure | `FixedDelay` re-executes pipeline, `Warning` per attempt |
+| Retry on failure | `FixedDelay` re-executes Conduit, `Warning` per attempt |
 | All retries exhausted | `Fatal` pulse, partial `Harvest` returned |
 | Inspecting results | `Harvest` counts, `Pulse` list, `Ring` summaries |

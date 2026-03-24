@@ -8,7 +8,7 @@ Xylem's structured diagnostics — Severity, ErrorKind, Pulse, Harvest, and Ring
 
 Xylem's diagnostics are designed around one principle: **failures must be
 loud, structured, and traceable.** A string error message is not enough —
-you need to know *what* failed, *why*, *where* in the pipeline, and *which
+you need to know *what* failed, *why*, *where* in the Conduit, and *which
 record* was involved.
 
 ---
@@ -19,10 +19,10 @@ Every diagnostic event carries a severity level:
 
 ```fsharp
 type Severity =
-    | Info      // Something noteworthy; pipeline is healthy
-    | Warning   // Unexpected but recoverable; pipeline continues
+    | Info      // Something noteworthy; Conduit is healthy
+    | Warning   // Unexpected but recoverable; Conduit continues
     | Error     // A record could not be processed; it is rejected
-    | Fatal     // Pipeline cannot continue; execution is aborted
+    | Fatal     // Conduit cannot continue; execution is aborted
 ```
 
 ---
@@ -39,7 +39,7 @@ type ErrorKind =
     | IoError               of path: string * exn
     | ValidationError       of field: string * reason: string
     | BusinessRuleViolation of rule: string * reason: string
-    | PipelineError         of stage: string * exn
+    | ConduitError         of stage: string * exn
     | Custom                of tag: string * data: Map<string, string>
     | RetryError            of attempt: int * exn
 ```
@@ -58,7 +58,7 @@ you need a biome-specific kind without modifying the library.
 
 ## `Pulse`
 
-A single structured event emitted during a pipeline run:
+A single structured event emitted during a Conduit run:
 
 ```fsharp
 type Pulse = {
@@ -79,7 +79,7 @@ record index; a pre-flight config check has no stage).
 
 ## `Harvest`
 
-The structured outcome of a completed pipeline run:
+The structured outcome of a completed Conduit run:
 
 ```fsharp
 type Harvest = {
@@ -116,7 +116,7 @@ type Ring = {
 ```
 
 `Stage` mirrors `Pulse.Stage` — it is `Some "validate"` for
-events emitted by a named vessel, or `None` for pipeline-level events such
+events emitted by a named vessel, or `None` for Conduit-level events such
 as retry warnings or fatal exceptions caught by `runWithContext`.
 
 ### Producing summaries
@@ -131,24 +131,24 @@ let summaries = Harvest.summarizeByStage result.Events
 
 The returned list preserves **first-occurrence order** — summaries
 appear in the order their stage was first seen in the event stream. This
-gives callers a natural pipeline-order view without requiring stages to
+gives callers a natural Conduit-order view without requiring stages to
 carry explicit sequence numbers.
 
 ### Typical usage
 
-After a pipeline run, summaries answer questions like *"how many records
+After a Conduit run, summaries answer questions like *"how many records
 did the validate stage reject?"* without scanning the raw event list:
 
 ```fsharp
 let summaries = Harvest.summarizeByStage result.Events
 
 for s in summaries do
-    let stage = s.Stage |> Option.defaultValue "(pipeline)"
+    let stage = s.Stage |> Option.defaultValue "(Conduit)"
     printfn $"{stage}: {s.ErrorCount} errors, {s.WarningCount} warnings"
 ```
 
 Events with `Stage = None` are grouped together — they typically contain
-retry diagnostics, fatal pipeline exceptions, or any other event not
+retry diagnostics, fatal Conduit exceptions, or any other event not
 tied to a specific vessel stage.
 
 For design rationale behind Ring (standalone function vs field, grouping

@@ -4,7 +4,7 @@ Built-in connectors that ship with Xylem — `InMemory` for tests, `File` for lo
 
 ---
 
-A **connector** is a `Root<'T>` or `Leaf<'T>` that ties the pipeline
+A **connector** is a `Root<'T>` or `Leaf<'T>` that ties the Conduit
 to a specific data store or transport. The core library ships three
 connectors out of the box: `Xylem.Connectors.InMemory`,
 `Xylem.Connectors.File`, and `Xylem.Connectors.Json`. Database
@@ -19,7 +19,7 @@ For guidance on writing your own connectors, see the
 
 The in-memory connector requires no I/O and no external dependencies.
 It is the go-to choice for tests, examples, and simple one-off
-pipelines.
+Conduits.
 
 ```fsharp
 open Xylem.Connectors
@@ -51,7 +51,7 @@ that snapshots the collected items on demand:
 ```fsharp
 let leaf, read = InMemory.sink ()
 
-do! Pipeline.runWith root vessel leaf
+do! Conduit.runWith root vessel leaf
 
 let items : int list = read ()   // ["item-2"; "item-4"; ...]
 ```
@@ -64,7 +64,7 @@ pattern and makes call-site assertions straightforward:
 Assert.Equal<int list>([2; 4], read ())
 ```
 
-### Full pipeline example
+### Full Conduit example
 
 ```fsharp
 open Xylem.Connectors
@@ -76,7 +76,7 @@ let vessel = Vessel.validate "check-positive" ctx (fun x ->
     else Result.Error (ValidationError("value", "must be positive")))
 let leaf, read = InMemory.sink ()
 
-let! result = Pipeline.runWithContext ctx root vessel leaf
+let! result = Conduit.runWithContext ctx root vessel leaf
 
 printfn $"Accepted: %A{read ()}"          // [1; 3; 5]
 printfn $"Rejected: %d{result.RecordsRejected}"  // 2
@@ -191,7 +191,7 @@ Empty lines are yielded as empty strings — they are not skipped. Use
 
 If the file does not exist or cannot be opened, the `StreamReader`
 constructor throws during the first iteration. The exception is caught
-by `Pipeline.runWithContext`, which emits a `Fatal` diagnostic and
+by `Conduit.runWithContext`, which emits a `Fatal` diagnostic and
 returns a well-formed `Harvest`.
 
 ### `File.sinkFrom` — factory constructor
@@ -222,7 +222,7 @@ let leaf = File.sink "output.csv" { FileLeafOptions.Default with Append = true }
 ```
 
 The default behaviour **overwrites** the file if it already exists —
-pipelines are designed to be re-runnable, and appending to a previous
+Conduits are designed to be re-runnable, and appending to a previous
 run's output would produce corrupt data. Append is opt-in via
 `FileLeafOptions`.
 
@@ -276,7 +276,7 @@ do! leaf.Write(taskSeq { yield "x"; yield "y" })
 The convenience overloads (`File.source path`, `File.sink path`) are
 integration-tested separately as thin wrappers over `sourceFrom`/`sinkFrom`.
 
-### Full pipeline example
+### Full Conduit example
 
 ```fsharp
 open Xylem
@@ -308,7 +308,7 @@ let vessel =
             (Vessel.map formatLine))
 let leaf = File.sinkDefault "people-clean.csv"
 
-let! result = Pipeline.runWithContext ctx root vessel leaf
+let! result = Conduit.runWithContext ctx root vessel leaf
 
 printfn $"Read: %d{result.RecordsRead}  Accepted: %d{result.RecordsAccepted}  Rejected: %d{result.RecordsRejected}"
 ```
@@ -459,7 +459,7 @@ the `sourceFrom`/`sinkFrom` behaviour.
 #### Overwrite by default
 
 Append-by-default would silently corrupt output on a rerun.
-Overwrite-by-default makes pipelines idempotent and rerunnable without
+Overwrite-by-default makes Conduits idempotent and rerunnable without
 manual cleanup. Append is opt-in via `FileLeafOptions`.
 
 #### `UTF-8` without BOM

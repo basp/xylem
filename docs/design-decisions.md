@@ -17,7 +17,7 @@ The alternative — adding a `StageSummaries: Ring list` field to
 rejected for several reasons:
 
 1. **Not every caller needs summaries.** Pre-computing them on every run
-   adds allocation and computation that simple pipelines (or pipelines
+   adds allocation and computation that simple Conduits (or Conduits
    that only check top-level counts) would never use.
 2. **Record stability.** Adding a field to `Harvest` is a
    breaking change for anyone pattern-matching or constructing the
@@ -35,7 +35,7 @@ flexibility gained.
 
 Stages are identified by their `string option` name, matching the
 `Pulse.Stage` field. An alternative would be a dedicated
-`Stage` type with richer metadata (ordering, parent pipeline, etc.).
+`Stage` type with richer metadata (ordering, parent Conduit, etc.).
 
 This was deferred because:
 
@@ -46,7 +46,7 @@ This was deferred because:
    marginal benefit at v1 scope.
 3. String names are simple, debuggable, and sufficient for grouping.
 
-If v2 introduces sub-pipelines or reusable fragments, a richer `Stage`
+If v2 introduces sub-Conduits or reusable fragments, a richer `Stage`
 type may become worthwhile.
 
 ### First-occurrence ordering
@@ -54,10 +54,10 @@ type may become worthwhile.
 Summaries are ordered by the first time each stage appears in the event
 list, not alphabetically or by event count. This was chosen because:
 
-1. It naturally reflects pipeline execution order — the first stage to
+1. It naturally reflects Conduit execution order — the first stage to
    emit an event appears first in the summary.
 2. It requires no explicit ordering metadata on stages.
-3. Alphabetical ordering would scramble the pipeline flow; count-based
+3. Alphabetical ordering would scramble the Conduit flow; count-based
    ordering would vary between runs.
 
 The trade-off is that a stage emitting no events has no summary entry.
@@ -70,7 +70,7 @@ stages, but this adds complexity without a clear use case today.
 
 Counts use `int64` to stay consistent with `Harvest.RecordsRead`
 and other counters. This avoids lossy conversions when comparing summary
-counts against pipeline-level totals, and future-proofs against large
+counts against Conduit-level totals, and future-proofs against large
 event volumes.
 
 ---
@@ -150,7 +150,7 @@ let validateAge ctx =
 
 **The drawback:** `ctx.Emit` is a side effect. Vessels that use it are no
 longer purely functional — they produce output *and* write to the context.
-This is a deliberate pragmatic choice. ETL pipelines inherently
+This is a deliberate pragmatic choice. ETL Conduits inherently
 produce side effects (writing files, hitting databases); pretending
 diagnostics can be fully pure adds complexity without benefit.
 
@@ -220,7 +220,7 @@ to the diagnostics model for what are fundamentally infrastructure errors.
 
 `OperationCanceledException` is deliberately excluded from the catch.
 Cancellation is not a failure — it is a deliberate stop signal. Catching
-it would suppress the caller's ability to detect that the pipeline was
+it would suppress the caller's ability to detect that the Conduit was
 cancelled rather than failed. The pre-existing
 `ThrowIfCancellationRequested()` check at the top of `runWithContext`
 continues to propagate normally. This also applies during retries —
@@ -234,7 +234,7 @@ immediately rather than being swallowed.
 ### The problem
 
 `runWithContext` catches unhandled exceptions and returns a
-`Harvest`, but the pipeline fails permanently on the first
+`Harvest`, but the Conduit fails permanently on the first
 error. Transient failures — network glitches, file locks, temporary
 service unavailability — are common in ETL workloads and ideally
 shouldn't require manual restarting.
@@ -247,20 +247,20 @@ Retry individual records that fail inside a vessel or sink. This is the
 most granular approach and avoids re-reading the source.
 
 *Why rejected:* Requires record-level buffering, replay infrastructure,
-and checkpoint support. A failed record inside a `taskSeq` pipeline
+and checkpoint support. A failed record inside a `taskSeq` Conduit
 can't simply be "replayed" without rewinding the async enumerator —
 which `IAsyncEnumerable` doesn't support. This is v2 territory (paired
 with checkpointing and dead-letter handling).
 
-**Option B — whole-pipeline retry (chosen, implemented)**
+**Option B — whole-Conduit retry (chosen, implemented)**
 
-On failure, re-execute the entire pipeline from `root.Read()`. The
+On failure, re-execute the entire Conduit from `root.Read()`. The
 root produces a fresh stream, the vessel transforms from scratch, and
 the sink receives fresh output.
 
 *Why chosen:*
 - **Simple and predictable.** No buffering, no partial state, no
-  enumerator rewinding. The pipeline is stateless by design — re-running
+  enumerator rewinding. The Conduit is stateless by design — re-running
   it is the same as running it for the first time.
 - **Correct for idempotent sources.** Files, databases with stable
   queries, and API endpoints with deterministic responses all produce the
@@ -282,7 +282,7 @@ their own retry loop.
 logic is tightly coupled to the diagnostic emission model — the engine
 is the natural place for it.
 
-### Trade-offs of whole-pipeline retry
+### Trade-offs of whole-Conduit retry
 
 | Concern | Assessment |
 |---|---|
