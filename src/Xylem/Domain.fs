@@ -224,6 +224,14 @@ module Domain =
         /// </summary>
         Duration:        TimeSpan
         /// <summary>
+        /// Throughput of the pipeline run in records per second.
+        /// </summary>
+        Throughput:      float
+        /// <summary>
+        /// Peak memory usage (working set) during the run, in bytes.
+        /// </summary>
+        PeakMemoryBytes: int64
+        /// <summary>
         /// List of pulses emitted during the run.
         /// </summary>
         Events:          Pulse list
@@ -274,6 +282,8 @@ module Harvest =
         RecordsRejected = 0L
         RecordsFailed   = 0L
         Duration        = TimeSpan.Zero
+        Throughput      = 0.0
+        PeakMemoryBytes = 0L
         Events          = []
     }
 
@@ -281,14 +291,21 @@ module Harvest =
     /// Builds a Harvest by folding over a list of pulses.
     /// The value of RecordsAccepted is defined as: read - rejected - failed.
     /// </summary>
-    let fromEvents (recordsRead: int64) (duration: TimeSpan) (events: Pulse list) =
+    let fromEvents (recordsRead: int64) (duration: TimeSpan) (peakMemory: int64) (events: Pulse list) =
         let rejected = events |> List.filter (fun e -> e.Severity = Error) |> List.length |> int64
         let failed   = events |> List.filter (fun e -> e.Severity = Fatal) |> List.length |> int64
+        let throughput = 
+            if duration.TotalSeconds > 0.0 then 
+                float recordsRead / duration.TotalSeconds
+            else 
+                0.0
         { RecordsRead     = recordsRead
           RecordsRejected = rejected
           RecordsFailed   = failed
           RecordsAccepted = recordsRead - rejected - failed
           Duration        = duration
+          Throughput      = throughput
+          PeakMemoryBytes = peakMemory
           Events          = events }
 
     /// <summary>
@@ -512,6 +529,10 @@ module Pipeline =
         task {
             ctx.CancellationToken.ThrowIfCancellationRequested()
             let sw    = System.Diagnostics.Stopwatch.StartNew()
+            let mutable peakMemory = 0L
+            let updatePeakMemory () =
+                let current = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64
+                if current > peakMemory then peakMemory <- current
 
             let maxAttempts, delay =
                 match ctx.RetryPolicy with
@@ -541,13 +562,16 @@ module Pipeline =
                         root.Read()
                         |> TaskSeq.map (fun item ->
                             count <- count + 1L
+                            if count % 1000L = 0L then updatePeakMemory ()
                             item)
                 }
 
                 try
                     do! runWith countingRoot vessel leaf
                     succeeded <- true
+                    updatePeakMemory ()
                 with ex ->
+                    updatePeakMemory ()
                     if attempt < maxAttempts then
                         ctx.Emit {
                             Severity    = Severity.Warning
@@ -571,7 +595,8 @@ module Pipeline =
                     attempt <- attempt + 1
 
             sw.Stop()
-            return Harvest.fromEvents count sw.Elapsed (ctx.ReadEvents())
+            updatePeakMemory ()
+            return Harvest.fromEvents count sw.Elapsed peakMemory (ctx.ReadEvents())
         }
 
     /// <summary>

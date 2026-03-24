@@ -79,7 +79,7 @@ let ``Harvest fromEvents computes counts from event list`` () =
         Helpers.makeEvent Fatal  (SystemError(Exception("disk")))        // failed
         Helpers.makeEvent Warning (Custom("coerced", Map.empty))                // warning — not a rejection
     ]
-    let result = Harvest.fromEvents 10L (TimeSpan.FromSeconds 1.0) events
+    let result = Harvest.fromEvents 10L (TimeSpan.FromSeconds 1.0) 0L events
     Assert.Equal(10L, result.RecordsRead)
     Assert.Equal(2L,  result.RecordsRejected)
     Assert.Equal(1L,  result.RecordsFailed)

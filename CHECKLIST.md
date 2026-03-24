@@ -73,13 +73,13 @@
 ## v1.1 — Hardening
 
 ### 1. Resilience and chaos testing
-- [ ] Locked file scenarios for File connector
-- [ ] Partial/corrupt JSON scenarios
+- [x] Locked file scenarios for File connector
+- [x] Partial/corrupt JSON scenarios
 - [ ] Interrupted stream recovery verification
 
 ### 2. Diagnostic polish
-- [ ] Throughput calculation (records/sec)
-- [ ] Peak memory/resource tracking in `Harvest`
+- [x] Throughput calculation (records/sec)
+- [x] Peak memory/resource tracking in `Harvest`
 - [ ] Improved `Fatal` error context messages
 
 ### 3. Example expansion

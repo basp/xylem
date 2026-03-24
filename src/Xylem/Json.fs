@@ -76,7 +76,9 @@ module Json =
             use writer = new Utf8JsonWriter(fileStream, writerOptions)
 
             writer.WriteStartArray()
-            do! stream |> TaskSeq.iter (fun item -> JsonSerializer.Serialize(writer, item))
+            do! stream |> TaskSeq.iter (fun item -> 
+                JsonSerializer.Serialize(writer, item)
+                writer.Flush())
             writer.WriteEndArray()
             do! writer.FlushAsync()
         }

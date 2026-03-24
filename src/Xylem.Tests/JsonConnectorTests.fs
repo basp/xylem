@@ -181,7 +181,7 @@ let ``Json sinkFromDefault writes objects as a JSON array to a MemoryStream`` ()
 /// <remarks>
 /// `ToArray()` returns a copy of the bytes written up to the stream's current
 /// length, not the underlying capacity. That lets the test assert the full JSON
-/// payload even after `Write` has disposed the stream.
+/// payload even after `Write` has disposed of the stream.
 /// </remarks>
 [<Fact>]
 let ``Json sinkFrom disposes the stream but ToArray still works`` () = task {
