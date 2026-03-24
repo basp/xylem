@@ -17,6 +17,9 @@ module ResilienceTests =
     let ``File connector handles locked file during write`` () = task {
         let path = Path.GetTempFileName()
         try
+            // Open and lock the file
+            use _ = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None)
+            
             let leaf = File.sinkDefault path
             let root = InMemory.source ["hello"]
             
