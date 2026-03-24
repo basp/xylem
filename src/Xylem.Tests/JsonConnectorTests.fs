@@ -29,8 +29,8 @@ let ``Json source reads objects from a JSON array file`` () = task {
         let! result = root.Read() |> TaskSeq.toListAsync
 
         Assert.Equal(2, result.Length)
-        Assert.Equal("Alice", result.[0].Name)
-        Assert.Equal("Bob", result.[1].Name)
+        Assert.Equal("Alice", result[0].Name)
+        Assert.Equal("Bob", result[1].Name)
     finally
         if File.Exists(path) then File.Delete(path)
 }
@@ -51,8 +51,8 @@ let ``Json sink writes objects as a JSON array to a file`` () = task {
         let result = JsonSerializer.Deserialize<Person list>(json)
 
         Assert.Equal(2, result.Length)
-        Assert.Equal("Alice", result.[0].Name)
-        Assert.Equal("Bob", result.[1].Name)
+        Assert.Equal("Alice", result[0].Name)
+        Assert.Equal("Bob", result[1].Name)
     finally
         if File.Exists(path) then File.Delete(path)
 }
@@ -92,8 +92,8 @@ let ``Full pipeline with Json source and sink`` () = task {
         let result = JsonSerializer.Deserialize<Person list>(resultJson)
 
         Assert.Equal(2, result.Length)
-        Assert.Equal("ALICE", result.[0].Name)
-        Assert.Equal("BOB", result.[1].Name)
+        Assert.Equal("ALICE", result[0].Name)
+        Assert.Equal("BOB", result[1].Name)
     finally
         if File.Exists(sourcePath) then File.Delete(sourcePath)
         if File.Exists(sinkPath) then File.Delete(sinkPath)
@@ -106,20 +106,20 @@ let ``Full pipeline with Json source and sink`` () = task {
 [<Fact>]
 let ``Json sourceFrom reads objects from a MemoryStream`` () = task {
     let data = [ { Id = 1; Name = "Alice" }; { Id = 2; Name = "Bob" } ]
-    let bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data)
+    let bytes = JsonSerializer.SerializeToUtf8Bytes(data)
     let root = Json.sourceFrom<Person> (fun () -> new MemoryStream(bytes) :> Stream)
 
     let! result = root.Read() |> TaskSeq.toListAsync
 
     Assert.Equal(2, result.Length)
-    Assert.Equal("Alice", result.[0].Name)
-    Assert.Equal("Bob", result.[1].Name)
+    Assert.Equal("Alice", result[0].Name)
+    Assert.Equal("Bob", result[1].Name)
 }
 
 [<Fact>]
 let ``Json sourceFrom calls factory on each Read`` () = task {
     let data = [ { Id = 1; Name = "Alice" } ]
-    let bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data)
+    let bytes = JsonSerializer.SerializeToUtf8Bytes(data)
     let mutable callCount = 0
     let root = Json.sourceFrom<Person> (fun () ->
         callCount <- callCount + 1
@@ -129,7 +129,7 @@ let ``Json sourceFrom calls factory on each Read`` () = task {
     let! second = root.Read() |> TaskSeq.toListAsync
 
     Assert.Equal(2, callCount)
-    Assert.Equal<string list>([first.[0].Name], [second.[0].Name])
+    Assert.Equal<string list>([first[0].Name], [second[0].Name])
 }
 
 // ---------------------------------------------------------------------------
@@ -146,7 +146,7 @@ let ``Json sinkFrom writes objects as a JSON array to a MemoryStream`` () = task
     let result = JsonSerializer.Deserialize<Person list>(json)
 
     Assert.Equal(2, result.Length)
-    Assert.Equal("Alice", result.[0].Name)
+    Assert.Equal("Alice", result[0].Name)
 }
 
 [<Fact>]
@@ -170,9 +170,19 @@ let ``Json sinkFromDefault writes objects as a JSON array to a MemoryStream`` ()
     let result = JsonSerializer.Deserialize<Person list>(json)
 
     Assert.Equal(1, result.Length)
-    Assert.Equal("Alice", result.[0].Name)
+    Assert.Equal("Alice", result[0].Name)
 }
 
+/// <summary>
+/// `MemoryStream` rejects cursor-based access after disposal, but it keeps the
+/// written bytes buffered internally, so `ToArray()` can still copy them out
+/// for verification.
+/// </summary>
+/// <remarks>
+/// `ToArray()` returns a copy of the bytes written up to the stream's current
+/// length, not the underlying capacity. That lets the test assert the full JSON
+/// payload even after `Write` has disposed the stream.
+/// </remarks>
 [<Fact>]
 let ``Json sinkFrom disposes the stream but ToArray still works`` () = task {
     use ms = new MemoryStream()
@@ -188,8 +198,8 @@ let ``Json sinkFrom disposes the stream but ToArray still works`` () = task {
     let result = JsonSerializer.Deserialize<Person list>(json)
 
     Assert.Equal(2, result.Length)
-    Assert.Equal("Alice", result.[0].Name)
-    Assert.Equal("Bob", result.[1].Name)
+    Assert.Equal("Alice", result[0].Name)
+    Assert.Equal("Bob", result[1].Name)
 }
 
 [<Fact>]
@@ -206,8 +216,8 @@ let ``Json sourceFrom and sinkFrom round-trip`` () = task {
     let! result = source.Read() |> TaskSeq.toListAsync
 
     Assert.Equal(2, result.Length)
-    Assert.Equal("Alice", result.[0].Name)
-    Assert.Equal("Bob", result.[1].Name)
+    Assert.Equal("Alice", result[0].Name)
+    Assert.Equal("Bob", result[1].Name)
 }
 
 // ---------------------------------------------------------------------------
