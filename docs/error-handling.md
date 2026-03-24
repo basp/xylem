@@ -332,6 +332,18 @@ else
     printfn $"Success: {result.RecordsAccepted} records processed"
 ```
 
+### Error Handling Checklist
+
+Before finalizing your pipeline's error handling strategy, verify:
+
+- [ ] **Distinguish record vs. pipeline errors**: Use `Vessel.validate` or `Vessel.enrich` for individual record rejections, and let infrastructure exceptions propagate to be caught as `Fatal` pulses.
+- [ ] **Choose the right `ErrorKind`**: Use specific cases like `ValidationError` or `BusinessRuleViolation` instead of generic strings to allow for easier pattern-matching.
+- [ ] **Leverage `Custom` errors**: For domain-specific failures that don't fit the standard categories, use `Custom(tag, data)` to carry structured diagnostic information.
+- [ ] **Configure Retry Policies**: Ensure `RetryPolicy` is explicitly set in the `ExecutionContext` if the pipeline needs to recover from transient failures.
+- [ ] **Handle the `Harvest`**: Check `result.RecordsFailed` and `result.RecordsRejected` after execution to decide if the run was successful or requires manual intervention.
+- [ ] **Inspect the `Pulse` stream**: Use `Harvest.summarizeByStage` or filter `result.Events` to identify which stages are producing the most errors.
+- [ ] **Respect Cancellation**: Ensure custom vessels or connectors call `ThrowIfCancellationRequested()` during long-running loops to support clean pipeline shutdowns.
+
 ---
 
 ## Summary
