@@ -67,7 +67,7 @@ By the end of v1, users should be able to:
 Keep this small and useful:
 - file root
 - file leaf
-- JSON or CSV connector
+- JSON connector
 - one simple in-memory connector for tests
 
 ### 7. Testability
@@ -183,6 +183,7 @@ Even though performance is not the primary goal, v2 can offer:
 ### 6. Connector expansion
 Add more production-grade adapters:
 - database reader/writer
+- CSV / fixed file reader
 - HTTP/API connector
 - message queue connector
 - object storage connector

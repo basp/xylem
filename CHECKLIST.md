@@ -52,9 +52,8 @@
 - [x] File root
 - [x] File leaf
 
-### 9. JSON / CSV connector
+### 9. JSON connector
 - [x] JSON connector
-- [ ] CSV connector
 
 ### 10. Integration and diagnostics tests
 - [x] Pure function coverage for transforms
@@ -112,6 +111,7 @@
 
 ### 6. Connector expansion
 - [ ] Database reader/writer
+- [ ] CSV / fixed file reader
 - [ ] HTTP / API connector
 - [ ] Message queue connector
 - [ ] Object storage connector

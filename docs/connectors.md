@@ -7,7 +7,7 @@ Built-in connectors that ship with Xylem — `InMemory` for tests, `File` for lo
 A **connector** is a `Root<'T>` or `Leaf<'T>` that ties the pipeline
 to a specific data store or transport. The core library ships three
 connectors out of the box: `Xylem.Connectors.InMemory`,
-`Xylem.Connectors.File`, and `Xylem.Connectors.Json`. CSV, database,
+`Xylem.Connectors.File`, and `Xylem.Connectors.Json`. Database
 and queue connectors are planned for future releases.
 
 For guidance on writing your own connectors, see the
