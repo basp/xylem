@@ -265,3 +265,20 @@ For test code, inject a `MemoryStream` factory. If you need to inspect the
 written output after `sinkFrom` returns, use `MemoryStream.ToArray()`
 rather than `Position` or `Read`, because the stream is disposed by the
 connector.
+
+```fsharp
+use ms = new MemoryStream()
+let leaf = Json.sinkFromDefault<Person> (fun () -> ms :> Stream)
+
+do! leaf.Write(taskSeq {
+    yield { Id = 1; Name = "Alice" }
+    yield { Id = 2; Name = "Bob" }
+})
+
+let json = System.Text.Encoding.UTF8.GetString(ms.ToArray())
+let result = JsonSerializer.Deserialize<Person list>(json)
+
+Assert.Equal(2, result.Length)
+Assert.Equal("Alice", result.[0].Name)
+Assert.Equal("Bob", result.[1].Name)
+```

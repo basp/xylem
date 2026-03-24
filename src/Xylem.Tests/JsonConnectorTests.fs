@@ -174,6 +174,25 @@ let ``Json sinkFromDefault writes objects as a JSON array to a MemoryStream`` ()
 }
 
 [<Fact>]
+let ``Json sinkFrom disposes the stream but ToArray still works`` () = task {
+    use ms = new MemoryStream()
+    let leaf = Json.sinkFromDefault<Person> (fun () -> ms :> Stream)
+    do! leaf.Write(taskSeq {
+        yield { Id = 1; Name = "Alice" }
+        yield { Id = 2; Name = "Bob" }
+    })
+
+    Assert.Throws<ObjectDisposedException>(fun () -> ms.Position <- 0L) |> ignore
+
+    let json = System.Text.Encoding.UTF8.GetString(ms.ToArray())
+    let result = JsonSerializer.Deserialize<Person list>(json)
+
+    Assert.Equal(2, result.Length)
+    Assert.Equal("Alice", result.[0].Name)
+    Assert.Equal("Bob", result.[1].Name)
+}
+
+[<Fact>]
 let ``Json sourceFrom and sinkFrom round-trip`` () = task {
     use ms = new MemoryStream()
     let sink = Json.sinkFromDefault<Person> (fun () -> ms :> Stream)
