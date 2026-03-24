@@ -13,6 +13,9 @@
 | In-memory test connector | v1 | Medium | Core domain model | Simplifies testing and examples |
 | Integration and diagnostics tests | v1 | High | All v1 core features | Verifies correctness and observability |
 | Public API documentation | v1 | High | Core v1 features | Makes the library usable and understandable |
+| Resilience and chaos testing | v1.1 | High | v1 connectors | Ensures stability under failure conditions |
+| Diagnostic & throughput polish | v1.1 | Medium | v1 diagnostics | Adds performance metadata to `Harvest` |
+| Real-world samples | v1.1 | Medium | v1 core | Provides complex multi-stage examples |
 | Branching and routing | v2 | High | Stable v1 pipeline model | Enables conditional paths and multi-branch flows |
 | Sub-pipelines and reusable fragments | v2 | High | Branching and routing | Improves composition and reuse |
 | Checkpointing | v2 | High | Execution engine, diagnostics | Enables resumable runs |
@@ -45,6 +48,11 @@ If you want the roadmap as a more linear dependency flow:
 7. File connectors
 8. Test connectors
 9. Tests and docs
+
+### v1.1 hardening
+1. Resilience/Chaos testing
+2. Diagnostic throughput polish
+3. Complex real-world samples
 
 ### v2 expansion
 1. Branching and routing

@@ -241,10 +241,10 @@ Still avoid overbuilding too early:
 - tests and docs
 
 ## Phase 2: v1.1 hardening (In progress)
-- polish diagnostics
-- improve error messages
-- add more examples
-- tighten edge cases
+- **Resilience testing**: chaos testing for File and JSON connectors
+- **Diagnostic polish**: throughput and performance metadata in `Harvest`
+- **Example expansion**: real-world samples and multi-stage chains
+- Tighten edge cases and improve error messages
 
 ## Phase 3: v2.0 expansion (Planned)
 - branching and sub-pipelines

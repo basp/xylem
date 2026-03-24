@@ -70,6 +70,25 @@
 
 ---
 
+## v1.1 — Hardening
+
+### 1. Resilience and chaos testing
+- [ ] Locked file scenarios for File connector
+- [ ] Partial/corrupt JSON scenarios
+- [ ] Interrupted stream recovery verification
+
+### 2. Diagnostic polish
+- [ ] Throughput calculation (records/sec)
+- [ ] Peak memory/resource tracking in `Harvest`
+- [ ] Improved `Fatal` error context messages
+
+### 3. Example expansion
+- [ ] Multi-stage validation/enrichment chain sample
+- [ ] Custom connector implementation example
+- [ ] Advanced retry policy configuration sample
+
+---
+
 ## v2 — Growth and specialisation
 
 ### 1. Advanced pipeline topology

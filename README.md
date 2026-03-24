@@ -137,8 +137,8 @@ over the event stream. Per-stage summaries are available via `Ring` values.
 
 ## 🚧 Status
 
-Xylem **v1 is complete** — the core pipeline model, execution engine, diagnostics, basic
-transforms, and essential connectors are implemented and verified.
+Xylem **v1 is complete**. The project is currently in **v1.1 Hardening**, focusing on
+resilience, diagnostic polish, and real-world examples before moving to v2.
 
 ### ✅ What's done (v1)
 
@@ -152,6 +152,12 @@ transforms, and essential connectors are implemented and verified.
 - ✅ JSON connector (array-based read/write)
 - ✅ Integration, diagnostics, and failure-path tests
 - ✅ Error handling and connector authoring guides
+
+### 🔧 Current Focus (v1.1 — Hardening)
+
+- ⬜ **Resilience testing**: chaos testing for File and JSON connectors
+- ⬜ **Diagnostic polish**: throughput and performance metadata in `Harvest`
+- ⬜ **Example expansion**: real-world samples and multi-stage chains
 
 ### 📅 What's next (v2)
 
