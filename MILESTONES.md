@@ -2,8 +2,8 @@
 
 | Milestone | Version | Priority | Dependencies | Outcome |
 |---|---:|---:|---|---|
-| Core domain model | v1 | High | None | Defines `Root`, `Vessel`, `Leaf`, `Pipeline`, `ExecutionContext`, and `Harvest` |
-| Basic pipeline execution engine | v1 | High | Core domain model | Runs a linear pipeline end-to-end |
+| Core domain model | v1 | High | None | Defines `Root`, `Vessel`, `Leaf`, `Conduit`, `ExecutionContext`, and `Harvest` |
+| Basic conduit execution engine | v1 | High | Core domain model | Runs a linear conduit end-to-end |
 | Diagnostics model | v1 | High | Core domain model | Captures structured pulses: warnings, errors, counts, and timings |
 | Error handling strategy | v1 | High | Core domain model, diagnostics model | Supports explicit failure handling and rejected records |
 | Batch processing support | v1 | High | Execution engine | Processes data in manageable chunks |
@@ -16,8 +16,8 @@
 | Resilience and chaos testing | v1.1 | High | v1 connectors | Ensures stability under failure conditions |
 | Diagnostic & throughput polish | v1.1 | Medium | v1 diagnostics | Adds performance metadata to `Harvest` |
 | Real-world samples | v1.1 | Medium | v1 core | Provides complex multi-stage examples |
-| Branching and routing | v2 | High | Stable v1 pipeline model | Enables conditional paths and multi-branch flows |
-| Sub-pipelines and reusable fragments | v2 | High | Branching and routing | Improves composition and reuse |
+| Branching and routing | v2 | High | Stable v1 conduit model | Enables conditional paths and multi-branch flows |
+| Sub-conduits and reusable fragments | v2 | High | Branching and routing | Improves composition and reuse |
 | Checkpointing | v2 | High | Execution engine, diagnostics | Enables resumable runs |
 | Resume from checkpoint | v2 | High | Checkpointing | Continues interrupted executions |
 | Dead-letter improvements | v2 | High | Error handling strategy | Handles rejected or failed items more flexibly |
@@ -56,7 +56,7 @@ If you want the roadmap as a more linear dependency flow:
 
 ### v2 expansion
 1. Branching and routing
-2. Sub-pipelines
+2. Sub-conduits
 3. Checkpointing
 4. Resume support
 5. Schema/contract validation

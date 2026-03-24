@@ -12,12 +12,12 @@ The roadmap is optimized for:
 # v1 — Foundation release (Complete)
 
 ## Objective
-Deliver a **reliable, composable ETL core** that can run real pipelines with strong diagnostics and predictable behavior. (Delivered)
+Deliver a **reliable, composable ETL core** that can run real conduits with strong diagnostics and predictable behavior. (Delivered)
 
 ## Core outcomes
 By the end of v1, users should be able to:
 
-- define a typed pipeline
+- define a typed conduit
 - read from a source
 - transform records
 - validate and reject bad inputs
@@ -27,11 +27,11 @@ By the end of v1, users should be able to:
 
 ## Scope
 
-### 1. Core pipeline model
+### 1. Core conduit model
 - `Root<'T>`
 - `Vessel<'TIn, 'TOut>`
 - `Leaf<'T>`
-- `Pipeline`
+- `Conduit`
 - `Harvest`
 - `ExecutionContext`
 
@@ -57,7 +57,7 @@ By the end of v1, users should be able to:
 - exception capture with context
 
 ### 5. Execution engine
-- async pipeline execution
+- async conduit execution
 - cancellation support
 - basic retry policy
 - configurable batch sizes
@@ -72,7 +72,7 @@ Keep this small and useful:
 
 ### 7. Testability
 - pure function coverage for transformations
-- integration tests for a full pipeline run
+- integration tests for a full conduit run
 - diagnostics assertions
 - failure-path tests
 
@@ -95,7 +95,7 @@ To keep the first release focused, avoid:
 
 ### Public API
 - minimal, coherent, documented
-- stable enough to build production pipelines
+- stable enough to build production conduits
 - easy to compose in F#
 
 ### Developer experience
@@ -106,7 +106,7 @@ To keep the first release focused, avoid:
 
 ### Documentation
 - quickstart
-- pipeline composition guide
+- conduit composition guide
 - diagnostics guide
 - error handling guide
 - connector authoring guide
@@ -116,7 +116,7 @@ To keep the first release focused, avoid:
 ## v1 success criteria
 v1 is successful if a user can:
 
-1. wire together a real ETL pipeline in under an hour
+1. wire together a real ETL conduit in under an hour
 2. understand failures without stepping through code
 3. add a custom transformation or connector without fighting the framework
 4. trust the library to fail loudly and clearly when something breaks
@@ -131,9 +131,9 @@ Expand the core into a more complete ETL framework with advanced routing, resili
 ## Core outcomes
 By the end of v2, users should be able to:
 
-- build multi-branch pipelines
+- build multi-branch conduits
 - checkpoint and resume runs
-- reuse pipeline components across jobs
+- reuse conduit components across jobs
 - handle more complex data movement patterns
 - scale execution patterns more confidently
 - observe runs in more detail
@@ -142,13 +142,13 @@ By the end of v2, users should be able to:
 
 ## Scope
 
-### 1. Advanced pipeline topology
+### 1. Advanced conduit topology
 - branching
 - fan-out
 - fan-in
 - conditional routing
-- sub-pipelines
-- reusable pipeline fragments
+- sub-conduits
+- reusable conduit fragments
 
 ### 2. Resilience features
 - checkpointing
@@ -193,14 +193,14 @@ Add more production-grade adapters:
 - custom stage libraries
 - shared transform packs
 - plugin-style connector registration
-- pipeline templates and presets
+- conduit templates and presets
 
 ---
 
 ## v2 non-goals
 Still avoid overbuilding too early:
 
-- a full visual pipeline designer
+- a full visual conduit designer
 - complex distributed orchestration across clusters
 - heavyweight workflow engine semantics
 - deeply opinionated hosting platform assumptions
@@ -247,7 +247,7 @@ Still avoid overbuilding too early:
 - Tighten edge cases and improve error messages
 
 ## Phase 3: v2.0 expansion (Planned)
-- branching and sub-pipelines
+- branching and sub-conduits
 - checkpointing
 - contract/schema support
 - new connectors
@@ -267,6 +267,6 @@ A good rule for this project:
 - **v1 = trustworthy core**
 - **v2 = expressive platform**
 
-That keeps the first version small enough to finish, while making room for the framework to grow without becoming a tangle of special cases. A very respectable fate for an ETL library — not every pipeline gets to be a majestic tree.
+That keeps the first version small enough to finish, while making room for the framework to grow without becoming a tangle of special cases. A very respectable fate for an ETL library — not every conduit gets to be a majestic tree.
 
 If you want, I can turn this into a **table with milestones, priorities, and dependencies** next.

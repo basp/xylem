@@ -27,7 +27,7 @@ stream), `Vessel<'TIn,'TOut>` (lazy stream transform), and `Leaf<'T>`
 with `>>>`, and how `Conduit.run` / `Conduit.runWith` wire them
 together.
 
-### [Conduits](Conduits.md)
+### [Conduits](conduits.md)
 
 How `Conduit.runWithContext` executes a full Root → Vessel → Leaf
 chain. Covers record counting, wall-clock timing, the guaranteed

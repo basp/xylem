@@ -10,7 +10,7 @@
 - [x] Define `Root<'T>`
 - [x] Define `Vessel<'TIn, 'TOut>`
 - [x] Define `Leaf<'T>`
-- [x] Define `Pipeline`
+- [x] Define `Conduit`
 - [x] Define `ExecutionContext`
 - [x] Define `Harvest`
 
@@ -28,7 +28,7 @@
 - [x] Exception capture with context
 
 ### 4. Basic execution engine
-- [x] Async linear pipeline run (`Task<_>`)
+- [x] Async linear conduit run (`Task<_>`)
 - [x] Cancellation support
 - [x] Basic retry policy
 - [x] Deterministic stage ordering
@@ -57,13 +57,13 @@
 
 ### 10. Integration and diagnostics tests
 - [x] Pure function coverage for transforms
-- [x] Full pipeline integration test
+- [x] Full conduit integration test
 - [x] Diagnostics assertions
 - [x] Failure-path tests
 
 ### 11. Public API documentation
 - [x] Quickstart guide
-- [x] Pipeline composition guide
+- [x] Conduit composition guide
 - [x] Diagnostics guide
 - [x] Error handling guide
 - [x] Connector authoring guide
@@ -91,13 +91,13 @@
 
 ## v2 — Growth and specialisation
 
-### 1. Advanced pipeline topology
+### 1. Advanced conduit topology
 - [ ] Branching
 - [ ] Fan-out
 - [ ] Fan-in
 - [ ] Conditional routing
-- [ ] Sub-pipelines
-- [ ] Reusable pipeline fragments
+- [ ] Sub-conduits
+- [ ] Reusable conduit fragments
 
 ### 2. Resilience features
 - [ ] Checkpointing
@@ -140,7 +140,7 @@
 - [ ] Custom stage libraries
 - [ ] Shared transform packs
 - [ ] Plugin-style connector registration
-- [ ] Pipeline templates and presets
+- [ ] Conduit templates and presets
 
 ### 8. Documentation maturity
 - [ ] Advanced routing guide

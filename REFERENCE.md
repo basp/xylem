@@ -6,9 +6,9 @@ library.
 
 ---
 
-## `Xylem.Domain`
+## `Xylem`
 
-### Pipeline core types
+### Conduit core types
 
 ```fsharp
 type Root<'T> = {
@@ -16,7 +16,7 @@ type Root<'T> = {
 }
 ```
 
-The origin of a data pipeline. Each call to `Read ()` starts a fresh,
+The origin of a data conduit. Each call to `Read ()` starts a fresh,
 independent stream.
 
 ```fsharp
@@ -25,7 +25,7 @@ type Leaf<'T> = {
 }
 ```
 
-The destination of a data pipeline. The leaf owns iteration, which allows
+The destination of a data conduit. The leaf owns iteration, which allows
 bulk operations and internal buffering.
 
 ```fsharp
@@ -60,7 +60,7 @@ type ErrorKind =
     | RetryError of attempt: int * exn
 ```
 
-Machine-readable error kinds used by pulses and pipeline diagnostics.
+Machine-readable error kinds used by pulses and conduit diagnostics.
 
 ```fsharp
 type Pulse = {
@@ -73,7 +73,7 @@ type Pulse = {
 }
 ```
 
-A single structured pulse emitted during a pipeline run.
+A single structured pulse emitted during a conduit run.
 
 ```fsharp
 type RetryPolicy =
@@ -81,7 +81,7 @@ type RetryPolicy =
     | FixedDelay of maxAttempts: int * delay: TimeSpan
 ```
 
-Controls how the pipeline retries on failure.
+Controls how the conduit retries on failure.
 
 ### Execution context
 
@@ -96,10 +96,10 @@ type ExecutionContext = {
 }
 ```
 
-Coordinates a single pipeline run: configuration, cancellation, and pulse
+Coordinates a single conduit run: configuration, cancellation, and pulse
 emission.
 
-`ExecutionContext.create` creates a new context for one pipeline run.
+`ExecutionContext.create` creates a new context for one conduit run.
 `ExecutionContext.withRetryPolicy` returns a copy with a different retry
 policy. `ExecutionContext.default` creates a context with
 `CancellationToken.None` and a batch size of 1,000.
@@ -126,12 +126,14 @@ type Harvest = {
     RecordsAccepted: int64
     RecordsRejected: int64
     RecordsFailed: int64
+    Throughput: float
+    PeakMemoryBytes: int64
     Duration: TimeSpan
     Events: Pulse list
 }
 ```
 
-The structured outcome of a completed pipeline run.
+The structured outcome of a completed conduit run.
 
 `Harvest.fromEvents` folds a pulse list into a `Harvest`. The accepted
 count is defined as `read - rejected - failed`.
@@ -141,7 +143,7 @@ count is defined as `read - rejected - failed`.
 
 ### Vessel helpers
 
-`Xylem.Vessel` provides the standard transforms used by pipelines:
+`Xylem.Vessel` provides the standard transforms used by conduits:
 
 ```fsharp
 Vessel.map       : ('TIn -> 'TOut) -> Vessel<'TIn, 'TOut>
@@ -160,25 +162,23 @@ Vessel.transmute : ('TIn -> 'TOut) -> Vessel<'TIn, 'TOut>
 provided execution context. `batch` groups consecutive items into arrays
 of up to the configured size.
 
-### Pipeline helpers
+### Conduit helpers
 
 ```fsharp
-Pipeline.run           : Root<'T> -> Leaf<'T> -> Task<unit>
-Pipeline.runWith       : Root<'TIn> -> Vessel<'TIn, 'TOut> -> Leaf<'TOut> -> Task<unit>
-Pipeline.runWithContext: ExecutionContext -> Root<'TIn> -> Vessel<'TIn, 'TOut> -> Leaf<'TOut> -> Task<Harvest>
-Pipeline.flow          : ExecutionContext -> Root<'TIn> -> Vessel<'TIn, 'TOut> -> Leaf<'TOut> -> Task<Harvest>
+Conduit.run           : Root<'T> -> Leaf<'T> -> Task<unit>
+Conduit.runWithContext: ExecutionContext -> Root<'TIn> -> Vessel<'TIn, 'TOut> -> Leaf<'TOut> -> Task<Harvest>
 ```
 
 `runWithContext` catches unhandled exceptions, records a `Fatal` pulse,
 and returns a well-formed `Harvest` rather than faulting the task. When a
-retry policy is configured, the pipeline is re-executed from scratch on
+retry policy is configured, the conduit is re-executed from scratch on
 failure.
 
 ---
 
 ## `Xylem.Connectors.InMemory`
 
-In-memory connectors for tests, examples, and simple one-off pipelines.
+In-memory connectors for tests, examples, and simple one-off conduits.
 They have no I/O and no external dependencies.
 
 ```fsharp

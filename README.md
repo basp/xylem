@@ -15,14 +15,14 @@ efficiency that plants move water.
 dotnet add reference path/to/Xylem.fsproj
 ```
 
-### 2. 💧 Your first pipeline
+### 2. 💧 Your first conduit
 
-A pipeline wires a `Root` (data source) through a `Vessel` (transform) into a
+A conduit wires a `Root` (data source) through a `Vessel` (transform) into a
 `Leaf` (data sink). Nothing runs until the leaf pulls from the root — the whole
 chain is lazy.
 
 ```fsharp
-open Xylem.Domain
+open Xylem
 open Xylem.Connectors
 
 // Create a root that produces integers
@@ -36,8 +36,8 @@ let vessel =
     Vessel.map (fun x -> x * 2)
     >>> Vessel.filter (fun x -> x > 4)
 
-// Run the pipeline
-do! Pipeline.runWith root vessel leaf
+// Run the conduit
+do! Conduit.run root vessel leaf
 
 let results = read ()  // [6; 8; 10]
 ```
@@ -58,7 +58,7 @@ let vessel =
         else Error (ValidationError("value", "must be positive")))
 
 let leaf, read = InMemory.sink ()
-let! result = Pipeline.runWithContext ctx root vessel leaf
+let! result = Conduit.runWithContext ctx root vessel leaf
 
 printfn "read=%d accepted=%d rejected=%d"
     result.RecordsRead result.RecordsAccepted result.RecordsRejected
@@ -78,7 +78,7 @@ let vessel =
     Vessel.map (fun (line: string) -> line.Trim())
     >>> Vessel.filter (fun line -> line.Length > 0)
 
-do! Pipeline.runWith root vessel leaf
+do! Conduit.run root vessel leaf
 ```
 
 ### 5. 🧺 Batching and enrichment
@@ -112,7 +112,7 @@ Xylem gives you a small set of composable building blocks:
 | **Root&lt;'T&gt;** | Produces a stream of records — each read is independent |
 | **Vessel&lt;'TIn, 'TOut&gt;** | Transforms records from one shape to another |
 | **Leaf&lt;'T&gt;** | Consumes records and owns the iteration |
-| **Pipeline** | Wires a Root → Vessel(s) → Leaf together |
+| **Conduit** | Wires a Root → Vessel(s) → Leaf together |
 | **ExecutionContext** | Carries runtime config: batch size, cancellation, diagnostics |
 | **Harvest** | Structured outcome with counts, timing, and diagnostic events |
 
@@ -130,7 +130,7 @@ Xylem gives you a small set of composable building blocks:
 
 ### 💓 Diagnostics
 
-Every pipeline run produces structured `Pulse` values with severity levels
+Every conduit run produces structured `Pulse` values with severity levels
 (Info / Warning / Error / Fatal), typed error kinds, stage names, record indices, and
 timestamps. Counts for read, accepted, rejected, and failed items are a simple fold
 over the event stream. Per-stage summaries are available via `Ring` values.
@@ -142,7 +142,7 @@ resilience, diagnostic polish, and real-world examples before moving to v2.
 
 ### ✅ What's done (v1)
 
-- ✅ Core domain model (`Root`, `Vessel`, `Leaf`, `Pipeline`, `ExecutionContext`, `Harvest`)
+- ✅ Core domain model (`Root`, `Vessel`, `Leaf`, `Conduit`, `ExecutionContext`, `Harvest`)
 - ✅ Structured diagnostics (`Pulse`, `Ring`) with severity, error kinds, and timing
 - ✅ `Result`-based error handling with rejection paths
 - ✅ Async execution with cancellation support
@@ -161,13 +161,13 @@ resilience, diagnostic polish, and real-world examples before moving to v2.
 
 ### 📅 What's next (v2)
 
-- ⬜ Advanced pipeline topology (branching, fan-out/in)
+- ⬜ Advanced conduit topology (branching, fan-out/in)
 - ⬜ Resilience features (checkpointing, resume)
 - ⬜ Schema and contract support
 - ⬜ Expanded connectors (CSV, Databases, HTTP)
 
-See [ROADMAP.md](ROADMAP.md) for the full v2 plan, and
-[CHECKLIST.md](CHECKLIST.md) for detailed progress tracking.
+See [roadmap.md](docs/roadmap.md) for the full v2 plan, and
+[checklist.md](docs/checklist.md) for detailed progress tracking.
 
 ## 📏 Guidelines
 
