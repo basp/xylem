@@ -53,7 +53,7 @@
 - [x] File leaf
 
 ### 9. JSON / CSV connector
-- [ ] JSON connector
+- [x] JSON connector
 - [ ] CSV connector
 
 ### 10. Integration and diagnostics tests

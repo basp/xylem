@@ -252,6 +252,12 @@ module ExecutionContext =
           RetryPolicy       = NoRetry }
 
     /// <summary>
+    /// Returns a new <c>ExecutionContext</c> with the specified retry policy.
+    /// </summary>
+    let withRetryPolicy (policy: RetryPolicy) (ctx: ExecutionContext) : ExecutionContext =
+        { ctx with RetryPolicy = policy }
+
+    /// <summary>
     /// Creates an <c>ExecutionContext</c> with <c>CancellationToken.None</c> and
     /// a batch size of 1 000 — suitable for tests and simple one-off runs.
     /// </summary>
@@ -462,7 +468,7 @@ module Vessel =
     let absorb = enrich
 
     /// <summary>
-    /// Alias for <c>map</c> — transmutes the record into a new form.
+    /// Alias for the <c>map</c> function — transmutes the record into a new form.
     /// </summary>
     let transmute = map
 
@@ -514,16 +520,27 @@ module Pipeline =
 
             let mutable attempt   = 0
             let mutable succeeded = false
-            let count             = ref 0L
+            let mutable count     = 0L
 
             while not succeeded && attempt <= maxAttempts do
-                count.Value <- 0L
+                // Clear any previous errors but re-emit any
+                // previous retry errors so they don't get lost.
+                let prevEvents = ctx.ReadEvents()                
+                ctx.ClearEvents()                
+                for e in prevEvents do
+                    match e.Kind with
+                    | RetryError _ -> ctx.Emit e
+                    | _ -> ()
 
+                count <- 0L
+
+                // Wraps the root in a counter that keeps track
+                // of a closed count variable.
                 let countingRoot : Root<'TIn> = {
                     Read = fun () ->
                         root.Read()
                         |> TaskSeq.map (fun item ->
-                            count.Value <- count.Value + 1L
+                            count <- count + 1L
                             item)
                 }
 
@@ -554,7 +571,7 @@ module Pipeline =
                     attempt <- attempt + 1
 
             sw.Stop()
-            return Harvest.fromEvents count.Value sw.Elapsed (ctx.ReadEvents())
+            return Harvest.fromEvents count sw.Elapsed (ctx.ReadEvents())
         }
 
     /// <summary>

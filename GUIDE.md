@@ -15,7 +15,7 @@ then follow the links as needed.
 | [Running Pipelines](docs/pipelines.md) | `Pipeline.runWithContext`, guaranteed `Harvest`, failure handling |
 | [Error Handling](docs/error-handling.md) | Per-record rejections, pipeline-level crashes, inspecting results |
 | [Retry Policy](docs/retry-policy.md) | `RetryPolicy` configuration, behaviour, and cumulative retry diagnostics |
-| [Connectors](docs/connectors.md) | Built-in `InMemory` and `File` connectors |
+| [Connectors](docs/connectors.md) | Built-in `InMemory`, `File`, and `Json` connectors |
 | [Connector Authoring](docs/connector-authoring.md) | Writing custom connectors — sources, sinks, and testing patterns |
 | [Design Decisions](docs/design-decisions.md) | Architectural rationale — trade-offs and alternatives considered |
 

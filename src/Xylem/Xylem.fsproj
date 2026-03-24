@@ -9,6 +9,7 @@
     <Compile Include="Domain.fs" />
     <Compile Include="InMemory.fs" />
     <Compile Include="File.fs" />
+    <Compile Include="Json.fs" />
     <None Include="Sandbox.fsx" />
   </ItemGroup>
 

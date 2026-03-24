@@ -126,6 +126,7 @@ Xylem gives you a small set of composable building blocks:
 |-----------|---------|
 | **InMemory** | Root and leaf backed by plain sequences — great for tests |
 | **File** | Line-oriented file root and leaf with encoding and append/overwrite options |
+| **Json** | JSON array file root and leaf with indented output support |
 
 ### 💓 Diagnostics
 
@@ -148,12 +149,13 @@ transforms, and first connectors are implemented and covered by 83 passing tests
 - ✅ Transforms: map, filter, validate, batch, enrich
 - ✅ In-memory connector (for testing and examples)
 - ✅ File connector (line-oriented read/write)
+- ✅ JSON connector (array-based read/write)
 - ✅ Integration, diagnostics, and failure-path tests
 
 ### 📅 What's next
 
 - ⬜ Error handling and connector authoring guides
-- ⬜ JSON and CSV connectors (nice-to-have)
+- ⬜ CSV connector (nice-to-have)
 
 See [ROADMAP.md](ROADMAP.md) for the full v1 and v2 plan, and
 [CHECKLIST.md](CHECKLIST.md) for detailed progress tracking.

@@ -8,7 +8,7 @@ How Xylem handles failures — from per-record rejections to pipeline-level cras
 
 Xylem treats errors as **data, not exceptions**. Every failure is captured
 as a structured `Pulse` with a severity, an `ErrorKind`, a stage name, and
-a record index. The pipeline keeps running past recoverable errors so you
+a record index. The pipeline (`flow`) keeps running past recoverable errors so you
 always get a complete picture of what went wrong — not just the first failure.
 
 Three principles guide the design:
@@ -50,7 +50,7 @@ the rest continue.
 
 ### Validation
 
-`Vessel.validate` checks every record against a predicate that returns
+`Vessel.validate` (or `prune`) checks every record against a predicate that returns
 `Result<'T, ErrorKind>`. Records that return `Ok` pass through; records
 that return `Error` are dropped and a `Pulse` is emitted:
 
@@ -71,7 +71,7 @@ Each rejection emits a pulse with:
 
 ### Enrichment
 
-`Vessel.enrich` works the same way but can **change the record type**.
+`Vessel.enrich` (or `absorb`) works the same way but can **change the record type**.
 Use it for lookups, projections, or joins that might fail:
 
 ```fsharp
@@ -117,7 +117,7 @@ mid-write. These are **pipeline-level** errors.
 
 ### Guaranteed Harvest
 
-`Pipeline.runWithContext` catches any unhandled exception (except
+`Pipeline.runWithContext` (or `flow`) catches any unhandled exception (except
 `OperationCanceledException`), emits a `Fatal` pulse, and returns a
 well-formed `Harvest`:
 
@@ -191,7 +191,7 @@ let ctx =
 On each retry:
 - The **entire pipeline** is re-executed from scratch (root, vessel, leaf)
 - A `Warning`-level `RetryError` pulse is emitted with the attempt number
-- Record counts are reset — only the final attempt's counts are reported
+- Record counts and diagnostic events are reset — only the final attempt's counts and pulses are reported
 
 If all retries are exhausted:
 - A `Fatal`-level `RetryError` pulse is emitted

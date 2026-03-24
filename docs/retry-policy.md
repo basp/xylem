@@ -21,9 +21,15 @@ type RetryPolicy =
 
 ## Configuring retry
 
-Set `RetryPolicy` on the `ExecutionContext` using a record update:
+Set `RetryPolicy` on the `ExecutionContext` using the `ExecutionContext.withRetryPolicy` helper or a record update:
 
 ```fsharp
+// Using the helper (recommended)
+let ctx =
+    ExecutionContext.``default`` ()
+    |> ExecutionContext.withRetryPolicy (FixedDelay(3, TimeSpan.FromSeconds 1.0))
+
+// Using record update
 let ctx =
     { ExecutionContext.``default`` () with
         RetryPolicy = FixedDelay(3, TimeSpan.FromSeconds 1.0) }
@@ -35,9 +41,13 @@ let ctx =
 
 The retry loop wraps the **entire pipeline**: root → vessel → leaf.
 On each retry, `root.Read()` is called again, the vessel processes from
-the beginning, and the sink receives a fresh stream. The record count
-is reset per attempt — `Harvest.RecordsRead` reflects only the
-last (successful or final) attempt.
+the beginning, and the sink receives a fresh stream. Both the record
+count and diagnostic pulses are reset per attempt — `Harvest` reflects
+only the latest (successful or final) attempt.
+
+Note: Previous `RetryError` pulses are preserved so that the final
+`Harvest` contains the full retry history, but transient pulses (like
+`ValidationError` or `Fatal` exceptions from failed attempts) are cleared.
 
 ---
 

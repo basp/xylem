@@ -133,7 +133,6 @@ let ``Pipeline runWithContext with FixedDelay(1) performs at most 2 total attemp
     let ctxWithRetry = { ctx with RetryPolicy = FixedDelay(1, TimeSpan.FromMilliseconds(10.0)) }
     let! result = Pipeline.runWithContext ctxWithRetry root vessel leaf
     
-    // CURRENT BUG: This will likely be 3 (initial, then retry 1, then retry 2)
     Assert.Equal(2, totalAttempts)
     Assert.Equal(1L, result.RecordsFailed)
 }
@@ -159,6 +158,5 @@ let ``Pipeline runWithContext successful retry does not include pulses from fail
     Assert.Equal(2, totalAttempts)
     Assert.Equal(1L, result.RecordsRead)
     Assert.Equal(1L, result.RecordsAccepted)
-    // CURRENT BUG: This will likely be 1 because it counts the Fatal pulse from the first attempt
     Assert.Equal(0L, result.RecordsFailed)
 }

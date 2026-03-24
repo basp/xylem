@@ -1,14 +1,14 @@
 # 🔗 Connectors
 
-Built-in connectors that ship with Xylem — `InMemory` for tests and `File` for local file system I/O.
+Built-in connectors that ship with Xylem — `InMemory` for tests, `File` for local file system I/O, and `Json` for JSON array files.
 
 ---
 
 A **connector** is a `Root<'T>` or `Leaf<'T>` that ties the pipeline
-to a specific data store or transport. The core library ships two
-connectors out of the box: `Xylem.Connectors.InMemory` and
-`Xylem.Connectors.File`. JSON/CSV, database, and queue connectors are
-planned for future releases.
+to a specific data store or transport. The core library ships three
+connectors out of the box: `Xylem.Connectors.InMemory`,
+`Xylem.Connectors.File`, and `Xylem.Connectors.Json`. CSV, database,
+and queue connectors are planned for future releases.
 
 For guidance on writing your own connectors, see the
 [connector authoring guide](connector-authoring.md).
@@ -324,9 +324,81 @@ whatever format the caller chooses.
 
 Keeping connectors as `Root<string>` / `Leaf<string>` means format
 handling belongs in a `Vessel`, which is the correct abstraction for
-record-level transforms. The upcoming JSON and CSV connectors will
-follow the same principle — they will be thin wrappers that compose a
-`File.source` with a parsing vessel.
+record-level transforms. The upcoming CSV connector will
+follow the same principle.
+
+---
+
+## `Xylem.Connectors.Json`
+
+The JSON connector provides a `Root<'T>` and `Leaf<'T>` for reading and
+writing JSON arrays to and from files. Unlike the line-oriented `File`
+connector, the JSON connector is **generic** — it uses `System.Text.Json`
+to deserialise and serialise records.
+
+```fsharp
+open Xylem.Connectors
+```
+
+### `Json.source`
+
+Creates a `Root<'T>` that reads a JSON array from a file. Each element
+in the array is yielded as a record of type `'T`:
+
+```fsharp
+type Person = { Id: int; Name: string }
+let root : Root<Person> = Json.source<Person> "people.json"
+```
+
+The file is read as an `IAsyncEnumerable` via `JsonSerializer.DeserializeAsyncEnumerable`,
+so the entire file is never fully loaded into memory.
+
+### `Json.sink`
+
+Creates a `Leaf<'T>` that writes records as a JSON array to a file. It
+supports custom options via `JsonLeafOptions`:
+
+```fsharp
+let options = { JsonLeafOptions.Default with WriteIndented = true }
+let leaf = Json.sink<Person> "output.json" options
+```
+
+The sink writes the opening `[` bracket, then serialises each item in the
+stream, and finally writes the closing `]` bracket.
+
+### `JsonLeafOptions`
+
+| Field | Default | Purpose |
+|---|---|---|
+| `WriteIndented` | `false` | When `true`, the JSON output is indented (pretty-printed) |
+| `Encoding` | `UTF-8` (no BOM) | Character encoding for the output file |
+
+### Responsibility boundary — typed vs untyped
+
+While the line-oriented `File` connector is untyped (`Root<string>`), the `Json`
+connector is typed (`Root<'T>`). This is because JSON is an inherently structured
+format where records are delimited by JSON structure rather than simple
+newlines. Providing a typed connector allows Xylem to leverage
+`System.Text.Json`'s streaming support directly.
+
+For cases where you have "JSON-per-line" (JSONL), use the `File` connector combined
+with a `Vessel.map` that calls `JsonSerializer.Deserialize`.
+
+---
+
+### Design decisions — `File`
+
+#### Lines only, not generic
+
+The alternative would be `File.source<'T>` with a built-in
+`string -> 'T` deserialiser parameter. This conflates connector and
+format concerns: the connector would need to know about CSV, JSON, or
+whatever format the caller chooses.
+
+Keeping connectors as `Root<string>` / `Leaf<string>` means format
+handling belongs in a `Vessel`, which is the correct abstraction for
+record-level transforms. The upcoming CSV connector will
+follow the same principle.
 
 #### Factory functions for testability
 
