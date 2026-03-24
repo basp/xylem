@@ -38,10 +38,13 @@ module ResilienceTests =
             
             let root = Json.source<Person> path
             
-            // Reading should eventually fail. It might be wrapped in AggregateException depending on how TaskSeq iterates.
+            // Reading should eventually fail.
+            // It might be wrapped in AggregateException depending on how TaskSeq iterates.
             let! ex = Assert.ThrowsAnyAsync<Exception>(fun () -> 
-                root.Read() |> TaskSeq.toListAsync :> System.Threading.Tasks.Task)
+                root.Read()
+                |> TaskSeq.toListAsync :> System.Threading.Tasks.Task)
             
+            // Recursively check for a JsonException.
             let isJsonEx (e: Exception) =
                 match e with
                 | :? JsonException -> true
@@ -79,17 +82,23 @@ module ResilienceTests =
                     failwith "Transient error"
                 yield 1
                 yield 2
+                yield 3
+                yield 4
+                yield 5
             }
         }
         
         let leaf, _ = InMemory.sink<int> ()
-        let ctx = ExecutionContext.``default`` () |> ExecutionContext.withRetryPolicy (FixedDelay (3, TimeSpan.FromMilliseconds 10.0))
+        let policy = FixedDelay (3, TimeSpan.FromMilliseconds 10.0)
+        let ctx =
+            ExecutionContext.``default`` ()
+            |> ExecutionContext.withRetryPolicy policy
         
         let! harvest = Pipeline.runWithContext ctx failingRoot (Vessel.transmute id) leaf
         
         Assert.Equal(3, calls)
-        Assert.Equal(2L, harvest.RecordsRead)
-        Assert.Equal(2L, harvest.RecordsAccepted)
+        Assert.Equal(5L, harvest.RecordsRead)
+        Assert.Equal(5L, harvest.RecordsAccepted)
         
         let retryEvents = harvest.Events |> List.filter (fun e -> match e.Kind with ErrorKind.RetryError _ -> true | _ -> false)
         Assert.Equal(2, retryEvents.Length)

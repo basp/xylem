@@ -31,6 +31,14 @@ for e in result.Events do
 The runner checks `ctx.CancellationToken` before starting so that an
 already-cancelled token throws immediately without touching the root.
 
+### Re-execution and Event Preservation
+
+When a retry occurs, the pipeline follows these key behaviors:
+
+*   **Full Re-execution:** The pipeline re-starts **from scratch**. This means the `Read` function of the root is invoked again on each retry, initiating a fresh, independent stream.
+*   **State Reset:** On each retry, the pipeline resets internal counters (like `RecordsRead`). The final `Harvest` reflects the counts from the **last attempted run** (whether it succeeded or reached the final failure).
+*   **Event Preservation:** Although the run counters reset, the `ExecutionContext` ensures that `RetryError` pulses from previous failed attempts are preserved. These are included in the final `Harvest.Events` list, allowing you to trace the history of the run.
+
 ---
 
 ## Unhandled exceptions — retries and guaranteed `Harvest`
