@@ -104,3 +104,137 @@ module ResilienceTests =
         Assert.Equal(2, retryEvents.Length)
         Assert.All(retryEvents, fun e -> Assert.Equal(Severity.Warning, e.Severity))
     }
+
+    [<Fact>]
+    let ``Conduit retries when stream fails mid-iteration`` () = task {
+        let mutable calls = 0
+        
+        let failingRoot : Root<int> = {
+            Read = fun () -> taskSeq {
+                calls <- calls + 1
+                if calls = 1 then
+                    yield 1
+                    yield 2
+                    failwith "Mid-stream transient error"
+                else
+                    yield 1
+                    yield 2
+                    yield 3
+            }
+        }
+        
+        let leaf, getResults = InMemory.sink<int> ()
+        let policy = FixedDelay (1, TimeSpan.FromMilliseconds 10.0)
+        let ctx =
+            ExecutionContext.``default`` ()
+            |> ExecutionContext.withRetryPolicy policy
+            
+        let! harvest = Conduit.runWithContext ctx failingRoot (Vessel.transmute id) leaf
+        
+        Assert.Equal(2, calls)
+        Assert.Equal(3L, harvest.RecordsRead)
+        Assert.Equal(3L, harvest.RecordsAccepted)
+        
+        // Note: InMemory.sink is idempotent — it clears on each Write call,
+        // so it only contains items from the final successful attempt.
+        let results = getResults ()
+        Assert.Equal<int list>([1; 2; 3], results)
+    }
+
+    [<Fact>]
+    let ``File sink handles interrupted stream and recovers via retry`` () = task {
+        let path = Path.GetTempFileName()
+        try
+            let mutable calls = 0
+            let failingRoot : Root<string> = {
+                Read = fun () -> taskSeq {
+                    calls <- calls + 1
+                    if calls = 1 then
+                        yield "line 1"
+                        yield "line 2"
+                        failwith "Mid-stream failure"
+                    else
+                        yield "line 1"
+                        yield "line 2"
+                        yield "line 3"
+                }
+            }
+            
+            let leaf = File.sinkDefault path
+            let policy = FixedDelay (1, TimeSpan.FromMilliseconds 10.0)
+            let ctx =
+                ExecutionContext.``default`` ()
+                |> ExecutionContext.withRetryPolicy policy
+                
+            let! _ = Conduit.runWithContext ctx failingRoot (Vessel.transmute id) leaf
+            
+            Assert.Equal(2, calls)
+            let content = File.ReadAllLines(path)
+            Assert.Equal<string[]>( [| "line 1"; "line 2"; "line 3" |], content)
+        finally
+            if File.Exists(path) then File.Delete(path)
+    }
+
+    [<Fact>]
+    let ``Json sink handles interrupted stream and recovers via retry`` () = task {
+        let path = Path.GetTempFileName()
+        try
+            let mutable calls = 0
+            let failingRoot : Root<Person> = {
+                Read = fun () -> taskSeq {
+                    calls <- calls + 1
+                    if calls = 1 then
+                        yield { Id = 1; Name = "Alice" }
+                        failwith "Mid-stream failure"
+                    else
+                        yield { Id = 1; Name = "Alice" }
+                        yield { Id = 2; Name = "Bob" }
+                }
+            }
+            
+            let leaf = Json.sinkDefault<Person> path
+            let policy = FixedDelay (1, TimeSpan.FromMilliseconds 10.0)
+            let ctx =
+                ExecutionContext.``default`` ()
+                |> ExecutionContext.withRetryPolicy policy
+                
+            let! _ = Conduit.runWithContext ctx failingRoot (Vessel.transmute id) leaf
+            
+            Assert.Equal(2, calls)
+            let json = File.ReadAllText(path)
+            let items = JsonSerializer.Deserialize<Person[]>(json)
+            Assert.Equal(2, items.Length)
+            Assert.Equal("Alice", items[0].Name)
+            Assert.Equal("Bob", items[1].Name)
+        finally
+            if File.Exists(path) then File.Delete(path)
+    }
+
+    [<Fact>]
+    let ``Conduit emits Fatal pulse after all retries exhausted for mid-stream error`` () = task {
+        let mutable calls = 0
+        let failingRoot : Root<int> = {
+            Read = fun () -> taskSeq {
+                calls <- calls + 1
+                yield 1
+                failwith $"Failure in attempt {calls}"
+            }
+        }
+        
+        let leaf, _ = InMemory.sink<int> ()
+        let policy = FixedDelay (2, TimeSpan.FromMilliseconds 10.0)
+        let ctx =
+            ExecutionContext.``default`` ()
+            |> ExecutionContext.withRetryPolicy policy
+            
+        let! harvest = Conduit.runWithContext ctx failingRoot (Vessel.transmute id) leaf
+        
+        Assert.Equal(3, calls) // Initial + 2 retries
+        Assert.Equal(1L, harvest.RecordsRead) 
+        Assert.Equal(1, harvest.Events |> List.filter (fun e -> e.Severity = Severity.Fatal) |> List.length)
+        
+        let fatal = harvest.Events |> List.find (fun e -> e.Severity = Severity.Fatal)
+        match fatal.Kind with
+        | ErrorKind.RetryError (attempt, _) -> Assert.Equal(3, attempt)
+        | _ -> failwith "Expected RetryError"
+    }

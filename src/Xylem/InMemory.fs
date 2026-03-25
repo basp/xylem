@@ -20,8 +20,9 @@ module InMemory =
     }
 
     /// <summary>
-    /// Creates an in-memory <c>Leaf&lt;'T&gt;</c> that accumulates every written
-    /// record into an internal buffer.
+    /// Creates an in-memory <c>Leaf&lt;'T&gt;</c> that collects records into an internal buffer.
+    /// Each call to <c>Write</c> clears the buffer and begins a fresh collection,
+    /// ensuring idempotency when the entire conduit is retried from scratch.
     /// Returns the leaf and a reader function. Each call to the reader returns
     /// a fresh <c>'T list</c> snapshot of the items collected so far —
     /// consistent with the pattern used by <c>ExecutionContext.ReadEvents</c>.
@@ -30,6 +31,7 @@ module InMemory =
         let buffer = ResizeArray<'T>()
         let leaf : Leaf<'T> = {
             Write = fun stream -> task {
+                buffer.Clear()
                 do! stream |> TaskSeq.iter buffer.Add
             }
         }

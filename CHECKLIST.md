@@ -75,7 +75,7 @@
 ### 1. Resilience and chaos testing
 - [x] Locked file scenarios for File connector
 - [x] Partial/corrupt JSON scenarios
-- [ ] Interrupted stream recovery verification
+- [x] Interrupted stream recovery verification
 
 ### 2. Diagnostic polish
 - [x] Throughput calculation (records/sec)

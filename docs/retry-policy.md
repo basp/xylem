@@ -45,10 +45,8 @@ the beginning, and the sink receives a fresh stream. Both the record
 count and diagnostic pulses are reset per attempt — `Harvest` reflects
 only the latest (successful or final) attempt.
 
-Note: Previous `RetryError` pulses are preserved so that the final
-`Harvest` contains the full retry history, but transient pulses (like
-`ValidationError` or `Fatal` exceptions from failed attempts) are cleared.
-
+> **Note**: previous `RetryError` pulses are preserved so that the final
+`Harvest` contains the full retry history.
 ---
 
 ## Diagnostic events during retries
