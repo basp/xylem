@@ -10,7 +10,6 @@
     <Compile Include="InMemory.fs" />
     <Compile Include="File.fs" />
     <Compile Include="Json.fs" />
-    <None Include="investigate_json.fsx" />
     <None Include="Sandbox.fsx" />
   </ItemGroup>
 
